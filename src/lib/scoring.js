@@ -21,7 +21,7 @@ export const CAT_KEY = {
 // ── GAP WEIGHTS ───────────────────────────────────────────────────────────────
 // Given my team's current projected totals and the JRH targets,
 // compute a weight per category (higher = more urgent need)
-export function computeGapWeights(myTotals, targets, roundNum = 1) {
+export function computeGapWeights(myTotals, targets, roundNum = 1, sensitivity = 1.0) {
   const weights = {}
   for (const cat of ALL_CATS) {
     const target = targets[cat]?.third
@@ -42,7 +42,7 @@ export function computeGapWeights(myTotals, targets, roundNum = 1) {
     }
 
     // Scale: 0 gap = 0.2 weight (still slightly valuable), 1 gap = 2.0 weight
-    weights[cat] = Math.max(0.2, Math.min(2.5, 0.2 + gap * 2.3))
+    weights[cat] = Math.max(0.2, Math.min(2.5, (0.2 + gap * 2.3) * sensitivity))
   }
 
   // Boost scarcity categories early in draft
