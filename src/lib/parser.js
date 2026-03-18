@@ -2,19 +2,18 @@
 
 // Parse FantasyPros snake draft round paste.
 //
-// FantasyPros draft room includes a player headshot image when copied,
-// which pastes as "Headshot of [Player Name]" — an extra line we must skip.
-//
-// Actual format per pick (7 lines with headshot, 6 without):
+// Each pick block is normally 6 lines:
 //   Team Name
-//   Pick# (e.g. 1.10)  — or "KPR" for keeper
-//   Headshot of P. Skenes   ← optional, skip this
-//   P. Skenes
-//   P
-//   PIT
+//   Pick# (e.g. 1.10) or KPR (keeper)
+//   Player Name
+//   Position
+//   MLB Team
 //   Edit
 //
-// Returns array of { pick, round, pickInRound, teamName, playerName, position, mlbTeam, isMine, isKeeper }
+// BUT keeper (KPR) blocks sometimes omit the "Edit" line — only 5 lines.
+// We detect this and advance correctly either way.
+//
+// FantasyPros also pastes "Headshot of [Name]" image alt text — strip those.
 
 export function parseFantasyProsRound(text, myTeamName = 'numbahs') {
   const lines = text
@@ -22,7 +21,6 @@ export function parseFantasyProsRound(text, myTeamName = 'numbahs') {
     .map(l => l.trim())
     .filter(l =>
       l.length > 0 &&
-      !l.toLowerCase().startsWith('headshot of') &&
       !l.toLowerCase().startsWith('headshot') &&
       l !== 'Current Pick' &&
       l !== 'Picks' &&
@@ -46,7 +44,6 @@ export function parseFantasyProsRound(text, myTeamName = 'numbahs') {
       const mlbTeam  = lines[i + 4] ?? ''
 
       let round = 0, pickInRound = 0, overallPick = 0
-
       if (isRegularPick) {
         const [roundStr, pinStr] = pickStr.split('.')
         round       = parseInt(roundStr)
@@ -68,7 +65,11 @@ export function parseFantasyProsRound(text, myTeamName = 'numbahs') {
         })
       }
 
-      i += 6
+      // Advance: check if lines[i+5] is "Edit" — if so skip 6, else skip 5
+      // This handles KPR blocks that don't always include the Edit line
+      const hasEdit = lines[i + 5]?.toLowerCase() === 'edit'
+      i += hasEdit ? 6 : 5
+
     } else {
       i++
     }
@@ -78,7 +79,6 @@ export function parseFantasyProsRound(text, myTeamName = 'numbahs') {
 }
 
 // ── NAME MATCHING ─────────────────────────────────────────────────────────────
-// Suffixes that should be ignored when finding the true last name
 const SUFFIXES = new Set(['jr', 'sr', 'ii', 'iii', 'iv'])
 
 function normName(s) {
@@ -89,8 +89,7 @@ function normName(s) {
     .replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim()
 }
 
-// Returns the last non-suffix word from a parts array
-// e.g. ["bobby","witt","jr"] → "witt"
+// Returns the last non-suffix word: ["bobby","witt","jr"] → "witt"
 function trueLastName(parts) {
   for (let i = parts.length - 1; i >= 0; i--) {
     if (!SUFFIXES.has(parts[i])) return parts[i]
@@ -98,39 +97,33 @@ function trueLastName(parts) {
   return parts[parts.length - 1]
 }
 
-// Fuzzy match a FantasyPros abbreviated name (e.g. "B. Witt", "F. Tatis Jr.")
-// to our player list. Returns matched player or null.
 export function matchPlayer(fpName, players) {
   const normFP  = normName(fpName)
   const fpParts = normFP.split(' ')
-  const fpLast  = trueLastName(fpParts)           // "witt" from "b witt jr"
-  const fpFirst = fpParts[0].replace('.', '')      // first initial or full name
+  const fpLast  = trueLastName(fpParts)
+  const fpFirst = fpParts[0].replace('.', '')
 
-  // 1. Exact match
+  // 1. Exact
   const exact = players.find(p => normName(p.name) === normFP)
   if (exact) return exact
 
   // 2. True last name + first initial
   const lastMatch = players.filter(p => {
-    const pn     = normName(p.name).split(' ')
-    const pLast  = trueLastName(pn)
+    const pn    = normName(p.name).split(' ')
+    const pLast = trueLastName(pn)
     const pFirst = pn[0]?.[0] ?? ''
     return pLast === fpLast && pFirst === fpFirst[0]
   })
   if (lastMatch.length === 1) return lastMatch[0]
-  if (lastMatch.length > 1) {
-    return lastMatch.sort((a, b) => (b.FPTS ?? 0) - (a.FPTS ?? 0))[0]
-  }
+  if (lastMatch.length > 1) return lastMatch.sort((a,b) => (b.FPTS??0)-(a.FPTS??0))[0]
 
-  // 3. True last name only (fallback — picks highest FPTS if multiple)
+  // 3. True last name only (fallback)
   const lastOnly = players.filter(p => {
     const pn = normName(p.name).split(' ')
     return trueLastName(pn) === fpLast
   })
   if (lastOnly.length === 1) return lastOnly[0]
-  if (lastOnly.length > 1) {
-    return lastOnly.sort((a, b) => (b.FPTS ?? 0) - (a.FPTS ?? 0))[0]
-  }
+  if (lastOnly.length > 1) return lastOnly.sort((a,b) => (b.FPTS??0)-(a.FPTS??0))[0]
 
   return null
 }
