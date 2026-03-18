@@ -218,12 +218,14 @@ export function buildRecommendations(
         const myRank = rankMap.get(p.id) ?? 999
         const edge   = myRank - p.cbsADP  // positive = we rank higher (value)
                                            // negative = market ranks much later (red flag)
-        if (edge > 20)       adpBoostPct =  0.15   // strong value
-        else if (edge > 10)  adpBoostPct =  0.08   // mild value
-        else if (edge > 5)   adpBoostPct =  0.03   // tiebreaker
-        else if (edge < -80) adpBoostPct = -0.15   // market much later — big red flag
-        else if (edge < -40) adpBoostPct = -0.08   // market notably later
-        else if (edge < -20) adpBoostPct = -0.04   // mild caution
+        if (edge > 20)        adpBoostPct =  0.15   // strong value
+        else if (edge > 10)   adpBoostPct =  0.08   // mild value
+        else if (edge > 5)    adpBoostPct =  0.03   // tiebreaker
+        else if (edge < -120) adpBoostPct = -0.50   // severe divergence (Gallen tier)
+        else if (edge < -80)  adpBoostPct = -0.35   // major red flag
+        else if (edge < -50)  adpBoostPct = -0.22   // significant divergence
+        else if (edge < -30)  adpBoostPct = -0.12   // notable divergence
+        else if (edge < -15)  adpBoostPct = -0.06   // mild caution
 
         if (adpBoostPct > 0) {
           reasons.push(`Value pick — ranked #${myRank} vs CBS ADP ${p.cbsADP.toFixed(1)} (+${Math.round(edge)})`)
