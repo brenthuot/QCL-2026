@@ -45,11 +45,22 @@ export function computeGapWeights(myTotals, targets, roundNum = 1, sensitivity =
     weights[cat] = Math.max(0.2, Math.min(2.5, (0.2 + gap * 2.3) * sensitivity))
   }
 
-  // Boost scarcity categories early in draft
-  if (roundNum <= 8) {
-    weights['SB'] = Math.min(3.0, (weights['SB'] ?? 1) * 1.2)
-    weights['S']  = Math.min(3.0, (weights['S']  ?? 1) * 1.2)
-    weights['HD'] = Math.min(3.0, (weights['HD'] ?? 1) * 1.1)
+  // Scarcity boosts — calibrated from 10-team mock draft:
+  // Top closers (Diaz/Miller/Munoz) go rounds 4–5, 2nd tier rounds 7–9
+  // Hold specialists don't go until rounds 12–13
+  // So: don't boost S/HD early — it was pushing closers into top 10 wrongly
+
+  // SB: always thin, mild boost throughout
+  weights['SB'] = Math.min(3.0, (weights['SB'] ?? 1) * 1.15)
+
+  // S (Saves): boost from round 7+ only — after hitting core is built
+  if (roundNum >= 7) {
+    weights['S'] = Math.min(2.5, (weights['S'] ?? 1) * 1.2)
+  }
+
+  // HD (Holds): only boost round 11+ — hold specs are genuinely round 12-13 targets
+  if (roundNum >= 11) {
+    weights['HD'] = Math.min(2.0, (weights['HD'] ?? 1) * 1.1)
   }
 
   return weights
