@@ -74,9 +74,9 @@ export default function App() {
   // Load data
   useEffect(() => {
     Promise.all([
-      fetch('/data/hitters.json').then(r => r.json()),
-      fetch('/data/pitchers.json').then(r => r.json()),
-      fetch('/data/config.json').then(r => r.json()),
+      fetch('/hitters.json').then(r => r.json()),
+      fetch('/pitchers.json').then(r => r.json()),
+      fetch('/config.json').then(r => r.json()),
     ]).then(([h, p, c]) => {
       setHitters(h)
       setPitchers(p)
