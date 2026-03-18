@@ -1143,6 +1143,13 @@ function Recommendations({ recommendations, round, roles, onDraftMe, onSelectPla
                     +{p.urgencyBoost.toFixed(1)} role bonus
                   </span>
                 )}
+                {p.adpBoost > 0 && (
+                  <span style={{ fontSize:10, color:'var(--green)',
+                    background:'rgba(34,197,94,0.12)', padding:'1px 5px', borderRadius:3,
+                    border:'1px solid rgba(34,197,94,0.25)' }}>
+                    +{(p.adpBoostPct * 100).toFixed(0)}% value
+                  </span>
+                )}
               </div>
               <div style={{ display:'flex', gap:10, fontSize:11, color:'var(--text2)', marginBottom:4, flexWrap:'wrap' }}>
                 <span>Score: <b style={{ color:'var(--blue2)' }}>{p.liveScore.toFixed(2)}</b></span>
