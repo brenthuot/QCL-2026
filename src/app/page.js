@@ -219,7 +219,8 @@ export default function App() {
   const recommendations = useMemo(() =>
     buildRecommendations(
       scoredPlayers.filter(p => !p.drafted && !p.isKeeper),
-      myPlayers, targets, round, myTotals, gapWeights
+      myPlayers, targets, round, myTotals, gapWeights,
+      scoredPlayers  // full pool for stable rank computation
     ).slice(0, 8),
   [scoredPlayers, myPlayers, targets, round, myTotals, gapWeights])
 
