@@ -187,18 +187,17 @@ export function rosterRoles(myPlayers) {
 // ── RECOMMENDATION ENGINE ─────────────────────────────────────────────────────
 export function buildRecommendations(
   availablePlayers, myPlayers, targets, roundNum, myTotals, gapWeights,
-  boardRankFn
+  fullPool
 ) {
   const roles = rosterRoles(myPlayers)
   const hitterCount = myPlayers.filter(p => p.type === 'hitter').length
   const pitcherCount = myPlayers.filter(p => p.type === 'pitcher').length
-  const remaining = 24 - myPlayers.length
-  const pitcherSlotsLeft = 9 - pitcherCount
-  const hitterSlotsLeft = 15 - hitterCount
 
-  // Pre-compute board rank from FULL pool (including drafted) so rank
-  // stays stable as the draft progresses — avoids edge inflation over time
-  const sortedFull = [...availablePlayers]
+  // Rank from FULL pool (all players including drafted + keepers) so rank
+  // stays stable all draft — a player ranked #30 in round 1 stays #30 in round 20
+  const poolForRank = fullPool ?? availablePlayers
+  const sortedFull = [...poolForRank]
+    .filter(p => !p.isKeeper)
     .sort((a, b) => (b.liveScore ?? -99) - (a.liveScore ?? -99))
   const rankMap = new Map(sortedFull.map((p, i) => [p.id, i + 1]))
 
@@ -228,9 +227,9 @@ export function buildRecommendations(
         else if (edge < -15)  adpBoostPct = -0.06   // mild caution
 
         if (adpBoostPct > 0) {
-          reasons.push(`Value pick — ranked #${myRank} vs CBS ADP ${p.cbsADP.toFixed(1)} (+${Math.round(edge)})`)
+          reasons.push(`Value pick — our overall rank #${myRank} vs CBS ADP ${p.cbsADP.toFixed(1)} (+${Math.round(edge)})`)
         } else if (adpBoostPct < 0) {
-          reasons.push(`⚠ Market ranks later — CBS ADP ${p.cbsADP.toFixed(1)} vs our #${myRank} (${Math.round(edge)})`)
+          reasons.push(`⚠ CBS ranks later (ADP ${p.cbsADP.toFixed(1)}) than our overall #${myRank} (${Math.round(edge)})`)
         }
       }
 
