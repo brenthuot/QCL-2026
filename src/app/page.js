@@ -391,11 +391,11 @@ export default function App() {
 // ── HEADER ────────────────────────────────────────────────────────────────────
 function AppHeader({ round, myCount, draftedTotal, onImport, onReset, tab, setTab }) {
   const tabs = [
-    { id:'board', label:'🎯 Draft Board' },
-    { id:'team',  label:'👤 My Team'     },
-    { id:'cats',  label:'📊 Categories'  },
-    { id:'rec',   label:'⚡ Recs'        },
-    { id:'pool',  label:'🔍 Full Pool'   },
+    { id:'board', label:'🎯 Draft Board', desc:'Live-ranked board. M = mine, D = other team drafted.' },
+    { id:'team',  label:'👤 My Team',     desc:'Your roster + 12-cat progress bars vs JRH targets.' },
+    { id:'cats',  label:'📊 Categories',  desc:'Gap analysis for all 12 cats sorted by urgency.' },
+    { id:'rec',   label:'⚡ Recs',        desc:'Best pick right now with plain-English reasoning.' },
+    { id:'pool',  label:'🔍 Full Pool',   desc:'Every player sortable by any stat. Good for lookups.' },
   ]
   return (
     <div style={{ background:'var(--bg2)', borderBottom:'1px solid var(--border2)' }}>
@@ -414,16 +414,32 @@ function AppHeader({ round, myCount, draftedTotal, onImport, onReset, tab, setTa
           </span>
         </div>
         <div style={{ display:'flex', gap:6 }}>
-          <button className="btn btn-primary btn-sm" onClick={onImport}>📥 Import Round</button>
-          <button className="btn btn-ghost btn-sm" onClick={onReset}>↺ Reset</button>
+          <button className="btn btn-primary btn-sm" onClick={onImport}
+            title="Paste FantasyPros round text to sync all picks at once">
+            📥 Import Round
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={onReset}
+            title="Clear all picks and restore keepers">
+            ↺ Reset
+          </button>
         </div>
       </div>
       <div className="tab-nav" style={{ padding:'0 14px' }}>
         {tabs.map(t => (
           <div key={t.id} className={`tab-item ${tab===t.id?'active':''}`}
-            onClick={() => setTab(t.id)}>{t.label}</div>
+            onClick={() => setTab(t.id)}
+            title={t.desc}>
+            {t.label}
+          </div>
         ))}
       </div>
+      {/* Active tab description bar */}
+      {tabs.find(t => t.id === tab) && (
+        <div style={{ padding:'3px 14px 4px', fontSize:10, color:'var(--text3)',
+          borderTop:'1px solid var(--border)', background:'var(--bg)' }}>
+          {tabs.find(t => t.id === tab).desc}
+        </div>
+      )}
     </div>
   )
 }
@@ -443,12 +459,15 @@ function Sidebar({ diagnostics, hitWeight, setHitWeight, pitCompress, setPitComp
         <button onClick={onClose} style={{ background:'none', border:'none',
           color:'var(--text3)', cursor:'pointer', fontSize:14 }}>◀</button>
       </div>
-      <div style={{ padding:'5px 12px 0', fontSize:10, color:'var(--text3)' }}>
-        All rankings update instantly as you adjust settings.
+      <div style={{ padding:'5px 12px 8px', fontSize:10, color:'var(--text3)',
+        borderBottom:'1px solid var(--border)', lineHeight:1.6 }}>
+        All rankings update instantly as you adjust settings.<br/>
+        <span style={{ color:'var(--yellow)' }}>Score</span> = z-score × gap weight × H/P weight.<br/>
+        <span style={{ color:'var(--green)' }}>Edge</span> = your rank minus CBS ADP (positive = value pick).
       </div>
 
       {/* Live Diagnostics */}
-      <SidebarSection title="Live Diagnostics">
+      <SidebarSection title="Live Diagnostics" hint="Are SPs & closers ranked high enough on your board?">
         <DiagRow label="SP in Top 20"  val={diagnostics.spIn20}  lo={3}  hi={5}  />
         <DiagRow label="SP in Top 50"  val={diagnostics.spIn50}  lo={10} hi={16} />
         <DiagRow label="SP in Top 100" val={diagnostics.spIn100} lo={22} hi={30} />
@@ -458,7 +477,7 @@ function Sidebar({ diagnostics, hitWeight, setHitWeight, pitCompress, setPitComp
       </SidebarSection>
 
       {/* My Keepers */}
-      <SidebarSection title="My Keepers">
+      <SidebarSection title="My Keepers" hint="Pre-loaded on your roster. Shown grayed out on the board.">
         {MY_KEEPERS.map(k => (
           <div key={k.name} style={{ display:'flex', justifyContent:'space-between',
             padding:'3px 0', borderBottom:'1px solid var(--border)' }}>
@@ -469,7 +488,7 @@ function Sidebar({ diagnostics, hitWeight, setHitWeight, pitCompress, setPitComp
       </SidebarSection>
 
       {/* Weights */}
-      <SidebarSection title="Weights">
+      <SidebarSection title="Weights" hint="Adjust how scores are calculated. Defaults work well.">
         <SliderRow label="Hitter weight" value={hitWeight} min={30} max={75} step={1}
           display={`${hitWeight}%`} onChange={setHitWeight} />
         <div style={{ fontSize:10, color:'var(--text3)', marginBottom:8 }}>
@@ -488,7 +507,7 @@ function Sidebar({ diagnostics, hitWeight, setHitWeight, pitCompress, setPitComp
       </SidebarSection>
 
       {/* Pitcher Roles */}
-      <SidebarSection title="Pitcher Roles">
+      <SidebarSection title="Pitcher Roles" hint="Track your 3 pitcher role targets. Red = behind pace.">
         {[
           { label:'Win Contributors', cur:roles.winContributors, target:7 },
           { label:'Closers (S)',       cur:roles.closers,         target:3 },
@@ -513,13 +532,19 @@ function Sidebar({ diagnostics, hitWeight, setHitWeight, pitCompress, setPitComp
   )
 }
 
-function SidebarSection({ title, children }) {
+function SidebarSection({ title, hint, children }) {
   return (
     <div style={{ borderBottom:'1px solid var(--border)' }}>
-      <div style={{ padding:'8px 12px 4px', fontSize:10, fontWeight:700,
+      <div style={{ padding:'8px 12px 2px', fontSize:10, fontWeight:700,
         letterSpacing:'0.1em', textTransform:'uppercase', color:'var(--text3)' }}>
         {title}
       </div>
+      {hint && (
+        <div style={{ padding:'0 12px 4px', fontSize:9, color:'var(--text3)',
+          lineHeight:1.5, fontStyle:'italic' }}>
+          {hint}
+        </div>
+      )}
       <div style={{ padding:'4px 12px 10px' }}>{children}</div>
     </div>
   )
@@ -601,6 +626,13 @@ function DraftBoard({
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%' }}>
       {/* Filter bar */}
+      <div style={{ padding:'4px 12px', background:'var(--bg)', borderBottom:'1px solid var(--border)',
+        fontSize:10, color:'var(--text3)', display:'flex', gap:16, alignItems:'center' }}>
+        <span><b style={{ color:'var(--text2)' }}>Score</b> = z-score weighted by your category gaps — updates after every pick</span>
+        <span><b style={{ color:'var(--green)' }}>M</b> = drafted by me &nbsp;·&nbsp; <b style={{ color:'var(--text2)' }}>D</b> = drafted by other team</span>
+        <span><b style={{ color:'var(--yellow)' }}>K·R#</b> = keeper, kept in that round</span>
+        <span>Edge = your rank vs CBS ADP (<b style={{ color:'var(--green)' }}>+</b> = value, <b style={{ color:'var(--red)' }}>–</b> = reaching)</span>
+      </div>
       <div style={{ padding:'7px 12px', background:'var(--bg2)',
         borderBottom:'1px solid var(--border)',
         display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
@@ -865,11 +897,19 @@ function CategoryDashboard({ myTotals, targets, gapWeights }) {
   const sorted = [...ALL_CATS].sort((a,b) => (gapWeights[b]??1)-(gapWeights[a]??1))
   return (
     <div style={{ padding:12, overflow:'auto' }}>
-      <div style={{ marginBottom:10, fontSize:13, fontWeight:700 }}>
-        Category Dashboard
-        <span style={{ fontSize:11, fontWeight:400, color:'var(--text3)', marginLeft:8 }}>
-          sorted by urgency · updates live after every pick
-        </span>
+      <div style={{ marginBottom:10 }}>
+        <div style={{ fontSize:13, fontWeight:700, marginBottom:4 }}>
+          📊 Category Dashboard
+          <span style={{ fontSize:11, fontWeight:400, color:'var(--text3)', marginLeft:8 }}>
+            sorted by urgency · updates live after every pick
+          </span>
+        </div>
+        <div style={{ fontSize:11, color:'var(--text3)', display:'flex', gap:16, flexWrap:'wrap' }}>
+          <span><b style={{ color:'var(--red)' }}>HIGH</b> = biggest gap, weight the most in rankings</span>
+          <span><b style={{ color:'var(--yellow)' }}>MED</b> = approaching — keep an eye on it</span>
+          <span><b style={{ color:'var(--green)' }}>OK</b> = on pace for 3rd place or better</span>
+          <span>Target = JRH historical 3rd-place threshold for this 10-team league</span>
+        </div>
       </div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(255px,1fr))', gap:10 }}>
         {sorted.map(cat => {
@@ -924,9 +964,16 @@ function CategoryDashboard({ myTotals, targets, gapWeights }) {
 function Recommendations({ recommendations, round, roles, onDraftMe }) {
   return (
     <div style={{ padding:12, overflow:'auto' }}>
-      <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:12 }}>
-        <span style={{ fontSize:13, fontWeight:700 }}>⚡ Best Picks Right Now</span>
-        <span style={{ fontSize:11, color:'var(--text3)' }}>Round {round} · Weighted by category gaps</span>
+      <div style={{ marginBottom:12 }}>
+        <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4 }}>
+          <span style={{ fontSize:13, fontWeight:700 }}>⚡ Best Picks Right Now</span>
+          <span style={{ fontSize:11, color:'var(--text3)' }}>Round {round} · Weighted by your category gaps</span>
+        </div>
+        <div style={{ fontSize:11, color:'var(--text3)', display:'flex', gap:16, flexWrap:'wrap' }}>
+          <span>Rankings = z-score × gap weight. Players filling your biggest needs rise to the top.</span>
+          <span><b style={{ color:'var(--orange)' }}>Role bonus</b> = extra boost when a pitcher role target is at risk.</span>
+          <span>Hit <b style={{ color:'var(--blue2)' }}>Draft</b> to add to your roster instantly.</span>
+        </div>
       </div>
       {roles.closers < 3 && round > 6 && (
         <div className="alert alert-warn" style={{ marginBottom:8 }}>
