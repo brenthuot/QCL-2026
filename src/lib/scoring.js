@@ -71,7 +71,9 @@ export function computeLiveScore(player, gapWeights) {
 
   for (const cat of cats) {
     const zKey = `z_${cat}`
-    const z = player[zKey] ?? 0
+    let z = player[zKey] ?? 0
+    // Closers: W category is irrelevant — they don't accumulate wins
+    if (player.pos === 'CL' && cat === 'W') z = 0
     const w = gapWeights[cat] ?? 1
     const contribution = z * w
     breakdown[cat] = { z: round2(z), w: round2(w), contribution: round2(contribution) }
