@@ -93,6 +93,7 @@ export default function App() {
   const [importText, setImportText] = useState('')
   const [importMsg,  setImportMsg]  = useState('')
   const [showReset,  setShowReset]  = useState(false)
+  const [selectedPlayer, setSelectedPlayer] = useState(null)
 
   // Load data + init keepers
   useEffect(() => {
@@ -338,6 +339,8 @@ export default function App() {
               onDraftMe={p => markDrafted(p, true)}
               onDraftOther={p => markDrafted(p, false)}
               onUndraft={undraftPlayer}
+              selectedPlayer={selectedPlayer}
+              onSelectPlayer={setSelectedPlayer}
             />
           )}
           {tab === 'team' && (
@@ -361,6 +364,8 @@ export default function App() {
               pos={poolPos} setPos={setPoolPos}
               sortKey={poolSort} setSort={setPoolSort}
               keeperByPlayerId={keeperByPlayerId}
+              selectedPlayer={selectedPlayer}
+              onSelectPlayer={setSelectedPlayer}
             />
           )}
         </div>
@@ -387,6 +392,21 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* PLAYER DETAIL PANEL */}
+      {selectedPlayer && (
+        <PlayerPanel
+          player={selectedPlayer}
+          onClose={() => setSelectedPlayer(null)}
+          onDraftMe={p => { markDrafted(p, true); setSelectedPlayer(null) }}
+          onDraftOther={p => { markDrafted(p, false); setSelectedPlayer(null) }}
+          onUndraft={id => { undraftPlayer(id); setSelectedPlayer(null) }}
+          keeperByPlayerId={keeperByPlayerId}
+          gapWeights={gapWeights}
+          targets={targets}
+          scoredPlayers={scoredPlayers}
+        />
       )}
     </div>
   )
@@ -597,6 +617,7 @@ function DraftBoard({
   search, setSearch, showDrafted, setShowDrafted,
   showKept, setShowKept, boardLimit, setBoardLimit,
   onDraftMe, onDraftOther, onUndraft,
+  selectedPlayer, onSelectPlayer,
 }) {
   const positions = ['ALL','C','1B','2B','3B','SS','OF','SP','RP','CL','SU']
 
@@ -698,7 +719,13 @@ function DraftBoard({
 
               return (
                 <tr key={p.id}
-                  style={p.isKeeper ? { opacity:0.42 } : p.drafted ? { opacity:0.35 } : {}}
+                  onClick={() => onSelectPlayer(p)}
+                  style={{
+                    ...(p.isKeeper ? { opacity:0.42 } : p.drafted ? { opacity:0.35 } : {}),
+                    cursor:'pointer',
+                    outline: selectedPlayer?.id === p.id ? '1px solid var(--blue)' : 'none',
+                    background: selectedPlayer?.id === p.id ? 'rgba(59,130,246,0.08)' : undefined,
+                  }}
                   className={`${p.isMine && !p.isKeeper ? 'mine' : ''} ${p.tierBreak && !p.isKeeper ? 'tier-break' : ''}`}
                 >
                   <td style={{ color:'var(--text3)', fontSize:11 }}>
@@ -1042,7 +1069,7 @@ function Recommendations({ recommendations, round, roles, onDraftMe }) {
 }
 
 // ── FULL POOL ─────────────────────────────────────────────────────────────────
-function FullPool({ players, search, setSearch, pos, setPos, sortKey, setSort, keeperByPlayerId }) {
+function FullPool({ players, search, setSearch, pos, setPos, sortKey, setSort, keeperByPlayerId, selectedPlayer, onSelectPlayer }) {
   const positions = ['ALL','C','1B','2B','3B','SS','OF','SP','RP','CL','SU']
   const sortOpts  = [
     {v:'liveScore',label:'Score'},{v:'FPTS',label:'FPTS'},
@@ -1099,7 +1126,13 @@ function FullPool({ players, search, setSearch, pos, setPos, sortKey, setSort, k
               const kInfo = keeperByPlayerId[p.id]
               return (
                 <tr key={p.id} className={p.isMine?'mine':''}
-                  style={p.isKeeper?{opacity:0.5}:p.drafted?{opacity:0.38}:{}}>
+                  onClick={() => onSelectPlayer(p)}
+                  style={{
+                    ...(p.isKeeper?{opacity:0.5}:p.drafted?{opacity:0.38}:{}),
+                    cursor:'pointer',
+                    outline: selectedPlayer?.id === p.id ? '1px solid var(--blue)' : 'none',
+                    background: selectedPlayer?.id === p.id ? 'rgba(59,130,246,0.08)' : undefined,
+                  }}>
                   <td style={{ fontWeight:p.isMine?700:400 }}>
                     {p.name}
                     {kInfo && (
@@ -1177,6 +1210,255 @@ function ImportModal({ text, setText, msg, setMsg, onParse, onClose, myCount }) 
           <button className="btn btn-primary" onClick={onParse}>Parse Round</button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── PLAYER PANEL ──────────────────────────────────────────────────────────────
+function PlayerPanel({ player, onClose, onDraftMe, onDraftOther, onUndraft,
+                       keeperByPlayerId, gapWeights, targets, scoredPlayers }) {
+  const isH    = player.type === 'hitter'
+  const kInfo  = keeperByPlayerId[player.id]
+  const isNeg  = cat => ['ERA','WHIP'].includes(cat)
+
+  // Board rank among undrafted non-keepers
+  const boardRank = useMemo(() => {
+    const avail = scoredPlayers.filter(p => !p.drafted && !p.isKeeper)
+    const sorted = [...avail].sort((a,b) => b.liveScore - a.liveScore)
+    const idx = sorted.findIndex(p => p.id === player.id)
+    return idx >= 0 ? idx + 1 : null
+  }, [scoredPlayers, player.id])
+
+  // Score breakdown from liveBreakdown
+  const breakdown = player.liveBreakdown ?? {}
+  const cats = isH ? ['R','H','HR','RBI','SB','OBP'] : ['W','S','HD','K','ERA','WHIP']
+
+  const edge = player.cbsADP && boardRank
+    ? Math.round(boardRank - player.cbsADP) : null
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:40 }}
+      />
+
+      {/* Panel */}
+      <div style={{
+        position:'fixed', top:0, right:0, bottom:0, width:320,
+        background:'var(--bg2)', borderLeft:'1px solid var(--border2)',
+        zIndex:50, display:'flex', flexDirection:'column',
+        boxShadow:'-8px 0 32px rgba(0,0,0,0.4)',
+        animation: 'slideIn 0.18s ease-out',
+      }}>
+        <style>{`@keyframes slideIn { from { transform: translateX(100%) } to { transform: translateX(0) } }`}</style>
+
+        {/* Panel header */}
+        <div style={{ padding:'14px 16px 10px', borderBottom:'1px solid var(--border)' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+            <div>
+              <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:4 }}>
+                <span style={{
+                  fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:3,
+                  background: isH ? 'rgba(34,197,94,0.15)' : 'rgba(59,130,246,0.15)',
+                  color: isH ? 'var(--green)' : 'var(--blue2)',
+                  border: `1px solid ${isH ? 'rgba(34,197,94,0.3)' : 'rgba(59,130,246,0.3)'}`,
+                }}>
+                  {isH ? 'HITTER' : player.pos === 'CL' ? 'CLOSER' : player.pos === 'SP' ? 'STARTER' : 'RELIEVER'}
+                </span>
+                {kInfo && (
+                  <span style={{ fontSize:10, fontWeight:700, color:'var(--yellow)',
+                    background:'rgba(251,191,36,0.12)', padding:'2px 6px', borderRadius:3,
+                    border:'1px solid rgba(251,191,36,0.3)' }}>
+                    KEPT R{kInfo.round} · {kInfo.team}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize:18, fontWeight:700, color:'var(--text)', lineHeight:1.2 }}>
+                {player.name}
+              </div>
+              <div style={{ fontSize:12, color:'var(--text3)', marginTop:2 }}>
+                <span style={{ color: posColor(player.pos), fontWeight:700 }}>{player.pos}</span>
+                {' · '}{player.team}
+              </div>
+            </div>
+            <button onClick={onClose} style={{
+              background:'none', border:'none', color:'var(--text3)',
+              fontSize:18, cursor:'pointer', padding:'0 4px', lineHeight:1,
+            }}>✕</button>
+          </div>
+        </div>
+
+        {/* Scrollable body */}
+        <div style={{ flex:1, overflowY:'auto', padding:'12px 16px', display:'flex', flexDirection:'column', gap:14 }}>
+
+          {/* Rank + Score + CBS */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8 }}>
+            <StatBox label="Board Rank" value={boardRank ? `#${boardRank}` : kInfo ? 'KEPT' : '—'}
+              color={boardRank && boardRank <= 20 ? 'var(--tier1)' : boardRank && boardRank <= 50 ? 'var(--tier2)' : 'var(--text)'} />
+            <StatBox label="Score" value={player.liveScore?.toFixed(2) ?? '—'} color="var(--blue2)" />
+            <StatBox label="Tier" value={player.tier ? `T${player.tier}` : '—'} color={tierColor(player.tier ?? 5)} />
+          </div>
+
+          {/* CBS ADP + Edge */}
+          {(player.cbsADP || edge != null) && (
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+              <StatBox label="CBS ADP" value={player.cbsADP?.toFixed(1) ?? '—'} color="var(--text2)" />
+              <StatBox
+                label="Edge vs CBS"
+                value={edge != null ? (edge > 0 ? `+${edge}` : `${edge}`) : '—'}
+                color={edge == null ? 'var(--text3)' : edge > 5 ? 'var(--green)' : edge < -5 ? 'var(--red)' : 'var(--text2)'}
+                hint={edge > 5 ? 'Value pick' : edge < -5 ? 'Reaching' : 'Near consensus'}
+              />
+            </div>
+          )}
+
+          {/* Score Breakdown */}
+          <div>
+            <div style={{ fontSize:10, fontWeight:700, letterSpacing:'0.1em',
+              textTransform:'uppercase', color:'var(--text3)', marginBottom:8 }}>
+              Score Breakdown
+            </div>
+            {cats.map(cat => {
+              const bd    = breakdown[cat] ?? {}
+              const z     = bd.z ?? 0
+              const w     = bd.w ?? (gapWeights[cat] ?? 1)
+              const contrib = bd.contribution ?? (z * w)
+              const barMax = 4
+              const barW  = Math.min(100, Math.abs(contrib) / barMax * 100)
+              const isPos = contrib >= 0
+              return (
+                <div key={cat} style={{ marginBottom:7 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, marginBottom:2 }}>
+                    <span style={{ color:'var(--text2)', fontWeight:600 }}>{cat}</span>
+                    <div style={{ display:'flex', gap:10, color:'var(--text3)', fontSize:10 }}>
+                      <span>z={z.toFixed(2)}</span>
+                      <span>wt={w.toFixed(2)}</span>
+                      <span style={{ color: isPos ? 'var(--green)' : 'var(--red)', fontWeight:700 }}>
+                        {isPos ? '+' : ''}{contrib.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ height:4, background:'var(--bg3)', borderRadius:2 }}>
+                    <div style={{
+                      height:'100%', borderRadius:2, width:`${barW}%`,
+                      background: isPos ? 'var(--green)' : 'var(--red)',
+                      marginLeft: isPos ? 0 : `${100 - barW}%`,
+                    }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Projected Stats */}
+          <div>
+            <div style={{ fontSize:10, fontWeight:700, letterSpacing:'0.1em',
+              textTransform:'uppercase', color:'var(--text3)', marginBottom:8 }}>
+              Projected Stats
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
+              {isH ? [
+                ['Runs (R)', Math.round(player.R ?? 0)],
+                ['Hits (H)', Math.round(player.H ?? 0)],
+                ['Home Runs (HR)', Math.round(player.HR ?? 0)],
+                ['RBI', Math.round(player.RBI ?? 0)],
+                ['Stolen Bases (SB)', Math.round(player.SB ?? 0)],
+                ['OBP', (player.OBP ?? 0).toFixed(3)],
+                ['PA', Math.round(player.PA ?? 0)],
+                ['WAR', (player.WAR ?? 0).toFixed(1)],
+              ] : [
+                ['Wins (W)', Math.round(player.W ?? 0)],
+                ['Saves (SV)', Math.round(player.SV ?? 0)],
+                ['Holds (HLD)', Math.round(player.HLD ?? 0)],
+                ['Strikeouts (K)', Math.round(player.SO ?? 0)],
+                ['ERA', (player.ERA ?? 0).toFixed(2)],
+                ['WHIP', (player.WHIP ?? 0).toFixed(3)],
+                ['IP', Math.round(player.IP ?? 0)],
+                ['WAR', (player.WAR ?? 0).toFixed(1)],
+              ].map(([lbl, val]) => (
+                <div key={lbl} style={{ background:'var(--bg3)', borderRadius:4, padding:'6px 10px' }}>
+                  <div style={{ fontSize:10, color:'var(--text3)', marginBottom:2 }}>{lbl}</div>
+                  <div style={{ fontSize:14, fontWeight:700, color:'var(--text)' }}>{val}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Category targets context */}
+          <div>
+            <div style={{ fontSize:10, fontWeight:700, letterSpacing:'0.1em',
+              textTransform:'uppercase', color:'var(--text3)', marginBottom:8 }}>
+              vs Your Targets
+            </div>
+            {cats.filter(cat => !isNeg(cat)).map(cat => {
+              const t3  = targets[cat]?.third
+              const val = isH
+                ? { R: player.R, H: player.H, HR: player.HR, RBI: player.RBI, SB: player.SB, OBP: player.OBP }[cat]
+                : { W: player.W, S: player.SV, HD: player.HLD, K: player.SO }[cat]
+              if (!t3 || val == null) return null
+              const pct = Math.min(1.2, val / t3)
+              const fmt = v => cat === 'OBP' ? v.toFixed(3) : Math.round(v)
+              return (
+                <div key={cat} style={{ marginBottom:6 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, marginBottom:2 }}>
+                    <span style={{ color:'var(--text2)' }}>{cat} contribution</span>
+                    <span style={{ color:'var(--text3)' }}>{fmt(val)} of {fmt(t3)} needed</span>
+                  </div>
+                  <div style={{ height:4, background:'var(--bg3)', borderRadius:2 }}>
+                    <div style={{
+                      height:'100%', borderRadius:2,
+                      background: pct >= 0.15 ? 'var(--green)' : pct >= 0.08 ? 'var(--yellow)' : 'var(--red)',
+                      width:`${Math.round(pct * 100)}%`,
+                    }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div style={{ padding:'12px 16px', borderTop:'1px solid var(--border)', display:'flex', flexDirection:'column', gap:8 }}>
+          {player.isKeeper ? (
+            <div style={{ textAlign:'center', color:'var(--yellow)', fontSize:12, fontWeight:700, padding:'8px 0' }}>
+              🔒 Keeper — already on roster
+            </div>
+          ) : player.drafted ? (
+            <>
+              <div style={{ textAlign:'center', fontSize:12, color:'var(--text3)', marginBottom:4 }}>
+                {player.isMine ? 'On your roster' : 'Drafted by another team'}
+              </div>
+              <button className="btn btn-ghost" style={{ width:'100%', justifyContent:'center' }}
+                onClick={() => onUndraft(player.id)}>
+                ↩ Undo Draft
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn btn-primary" style={{ width:'100%', justifyContent:'center', padding:'9px 0', fontSize:13 }}
+                onClick={() => onDraftMe(player)}>
+                + Add to my team
+              </button>
+              <button className="btn btn-ghost" style={{ width:'100%', justifyContent:'center' }}
+                onClick={() => onDraftOther(player)}>
+                Mark drafted by others (off board)
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
+function StatBox({ label, value, color, hint }) {
+  return (
+    <div style={{ background:'var(--bg3)', borderRadius:4, padding:'8px 10px', textAlign:'center' }}>
+      <div style={{ fontSize:10, color:'var(--text3)', marginBottom:4 }}>{label}</div>
+      <div style={{ fontSize:17, fontWeight:700, color: color ?? 'var(--text)' }}>{value}</div>
+      {hint && <div style={{ fontSize:9, color:'var(--text3)', marginTop:2 }}>{hint}</div>}
     </div>
   )
 }
