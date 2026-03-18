@@ -203,19 +203,19 @@ export function buildRecommendations(
       let reasons = []
 
       // Pitcher role urgency
+      // HD/SU deliberately excluded — hold specialists are waiver-streamable
       if (p.type === 'pitcher') {
         if (p.pos === 'CL' && roles.closers < 3) {
-          urgencyBoost += 1.5
-          reasons.push(`Need closers (${roles.closers}/3) — S gap`)
-        }
-        if (p.pos === 'SU' && roles.holdSpec < 2) {
-          urgencyBoost += 1.0
-          reasons.push(`Need hold specialists (${roles.holdSpec}/2) — HD gap`)
+          // Only boost closers from round 7+ — don't chase saves in rounds 1-6
+          const saveUrgency = roundNum >= 7 ? 1.5 : roundNum >= 5 ? 0.6 : 0
+          urgencyBoost += saveUrgency
+          if (saveUrgency > 0) reasons.push(`Need closers (${roles.closers}/3) — S gap`)
         }
         if (p.pos === 'SP' && roles.winContributors < 7) {
           urgencyBoost += 0.8
           reasons.push(`Need win contributors (${roles.winContributors}/7) — W gap`)
         }
+        // SU/RP: no urgency boost — stream these on waivers
       }
 
       // Category need reasons
