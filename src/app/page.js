@@ -649,11 +649,20 @@ function DraftBoard({
 
   const topScore = players.find(p => !p.drafted && !p.isKeeper)?.liveScore ?? 1
 
-  let rankCounter = 0
-  const withRank = filtered.map(p => {
-    if (!p.isKeeper && !p.drafted) rankCounter++
-    return { ...p, boardRank: (p.isKeeper || p.drafted) ? null : rankCounter }
-  })
+  // Stable full-pool rank: computed once from ALL players sorted by score
+  // This doesn't reset as players are drafted
+  const fullPoolSorted = useMemo(() =>
+    [...players]
+      .filter(p => !p.isKeeper)
+      .sort((a, b) => (b.liveScore ?? -99) - (a.liveScore ?? -99))
+      .map((p, i) => [p.id, i + 1]),
+  [players])
+  const fullPoolRankMap = useMemo(() => new Map(fullPoolSorted), [fullPoolSorted])
+
+  const withRank = filtered.map(p => ({
+    ...p,
+    boardRank: p.isKeeper ? null : (fullPoolRankMap.get(p.id) ?? null)
+  }))
 
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%' }}>
@@ -1333,10 +1342,11 @@ function PlayerPanel({ player, onClose, onDraftMe, onDraftOther, onUndraft,
   const kInfo  = keeperByPlayerId[player.id]
   const isNeg  = cat => ['ERA','WHIP'].includes(cat)
 
-  // Board rank among undrafted non-keepers
+  // Stable board rank from full pool (including drafted) — doesn't shift as picks happen
   const boardRank = useMemo(() => {
-    const avail = scoredPlayers.filter(p => !p.drafted && !p.isKeeper)
-    const sorted = [...avail].sort((a,b) => b.liveScore - a.liveScore)
+    const sorted = [...scoredPlayers]
+      .filter(p => !p.isKeeper)
+      .sort((a,b) => (b.liveScore ?? -99) - (a.liveScore ?? -99))
     const idx = sorted.findIndex(p => p.id === player.id)
     return idx >= 0 ? idx + 1 : null
   }, [scoredPlayers, player.id])
