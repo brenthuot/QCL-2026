@@ -209,19 +209,26 @@ export function buildRecommendations(
       let urgencyBoost = 0
       let reasons = []
 
-      // ── ADP VALUE BOOST ──────────────────────────────────────────────────
-      // Small boost when our rank beats CBS ADP — acts as tiebreaker only.
-      // Only applied when base score is positive (don't rescue negatives).
-      // Capped at +15% so category logic still dominates.
+      // ── ADP VALUE BOOST / PENALTY ────────────────────────────────────────
+      // Boost when our rank beats CBS ADP (value pick — tiebreaker only).
+      // Penalty when CBS ADP is much later than our rank (market red flag).
+      // Capped at ±15% so category logic always dominates.
       let adpBoostPct = 0
       if (liveScore > 0 && p.cbsADP) {
         const myRank = rankMap.get(p.id) ?? 999
         const edge   = myRank - p.cbsADP  // positive = we rank higher (value)
-        if (edge > 20)      adpBoostPct = 0.15
-        else if (edge > 10) adpBoostPct = 0.08
-        else if (edge > 5)  adpBoostPct = 0.03
+                                           // negative = market ranks much later (red flag)
+        if (edge > 20)       adpBoostPct =  0.15   // strong value
+        else if (edge > 10)  adpBoostPct =  0.08   // mild value
+        else if (edge > 5)   adpBoostPct =  0.03   // tiebreaker
+        else if (edge < -80) adpBoostPct = -0.15   // market much later — big red flag
+        else if (edge < -40) adpBoostPct = -0.08   // market notably later
+        else if (edge < -20) adpBoostPct = -0.04   // mild caution
+
         if (adpBoostPct > 0) {
           reasons.push(`Value pick — ranked #${myRank} vs CBS ADP ${p.cbsADP.toFixed(1)} (+${Math.round(edge)})`)
+        } else if (adpBoostPct < 0) {
+          reasons.push(`⚠ Market ranks later — CBS ADP ${p.cbsADP.toFixed(1)} vs our #${myRank} (${Math.round(edge)})`)
         }
       }
 
