@@ -184,9 +184,13 @@ export default function App() {
     const hitW = hitWeight / 100
     const all = allPlayers.map(p => {
       const { liveScore, liveBreakdown } = computeLiveScore(p, gapWeights)
+      // RP/CL/SU contribute to fewer categories (S or HD only, no W/K)
+      // so they need a strong dampener to avoid overranking vs SP and hitters.
+      // pitCompress slider controls SP. RP gets an additional fixed 0.52 dampener.
+      const rpDampener = ['CL','SU','RP'].includes(p.pos) ? 0.52 : 1.0
       const typeScale = p.type === 'hitter'
         ? hitW * 2
-        : pitW * 2 * (p.pos === 'SP' ? pitCompress : 1)
+        : pitW * 2 * (p.pos === 'SP' ? pitCompress : pitCompress * rpDampener)
       const kInfo = keeperByPlayerId[p.id]
       return {
         ...p,
@@ -496,7 +500,7 @@ function Sidebar({ diagnostics, hitWeight, setHitWeight, pitCompress, setPitComp
         </div>
         <SliderRow label="Pitcher compression" value={pitCompress} min={0.60} max={1.10} step={0.05}
           display={pitCompress.toFixed(2)} onChange={setPitCompress}
-          hint="Lower = fewer SP dominating top of board" />
+          hint="SP scale factor. RP/CL always get an extra 0.52× dampener on top." />
         <SliderRow label="Gap sensitivity" value={gapSensitivity} min={0.5} max={2.0} step={0.1}
           display={gapSensitivity.toFixed(1)} onChange={setGapSensitivity}
           hint="How strongly category gaps shift rankings" />
