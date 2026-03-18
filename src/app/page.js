@@ -841,6 +841,77 @@ function DraftBoard({
 
 // ── MY TEAM ───────────────────────────────────────────────────────────────────
 function MyTeam({ myPlayers, myTotals, targets, roles, onUndraft, keeperIds }) {
+  // Slot definitions in display order
+  const SLOTS = [
+    { id:'C',    label:'C',    eligible:['C'],                              group:'hitters' },
+    { id:'1B',   label:'1B',   eligible:['1B'],                             group:'hitters' },
+    { id:'2B',   label:'2B',   eligible:['2B'],                             group:'hitters' },
+    { id:'3B',   label:'3B',   eligible:['3B'],                             group:'hitters' },
+    { id:'SS',   label:'SS',   eligible:['SS'],                             group:'hitters' },
+    { id:'OF1',  label:'OF',   eligible:['OF'],                             group:'hitters' },
+    { id:'OF2',  label:'OF',   eligible:['OF'],                             group:'hitters' },
+    { id:'OF3',  label:'OF',   eligible:['OF'],                             group:'hitters' },
+    { id:'OF4',  label:'OF',   eligible:['OF'],                             group:'hitters' },
+    { id:'UT1',  label:'UTIL', eligible:['C','1B','2B','3B','SS','OF'],     group:'hitters' },
+    { id:'UT2',  label:'UTIL', eligible:['C','1B','2B','3B','SS','OF'],     group:'hitters' },
+    { id:'UT3',  label:'UTIL', eligible:['C','1B','2B','3B','SS','OF'],     group:'hitters' },
+    { id:'SP1',  label:'SP',   eligible:['SP'],                             group:'pitchers' },
+    { id:'SP2',  label:'SP',   eligible:['SP'],                             group:'pitchers' },
+    { id:'SP3',  label:'SP',   eligible:['SP'],                             group:'pitchers' },
+    { id:'SP4',  label:'SP',   eligible:['SP'],                             group:'pitchers' },
+    { id:'RP1',  label:'RP',   eligible:['RP','CL','SU'],                   group:'pitchers' },
+    { id:'RP2',  label:'RP',   eligible:['RP','CL','SU'],                   group:'pitchers' },
+    { id:'RP3',  label:'RP',   eligible:['RP','CL','SU'],                   group:'pitchers' },
+    { id:'P1',   label:'P',    eligible:['SP','RP','CL','SU'],              group:'pitchers' },
+    { id:'P2',   label:'P',    eligible:['SP','RP','CL','SU'],              group:'pitchers' },
+    { id:'BN1',  label:'BN',   eligible:['C','1B','2B','3B','SS','OF','SP','RP','CL','SU'], group:'bench' },
+    { id:'BN2',  label:'BN',   eligible:['C','1B','2B','3B','SS','OF','SP','RP','CL','SU'], group:'bench' },
+    { id:'BN3',  label:'BN',   eligible:['C','1B','2B','3B','SS','OF','SP','RP','CL','SU'], group:'bench' },
+  ]
+
+  // Greedy slot-filling: fill specific slots first, then flex/bench
+  // Priority order: specific pos slots → UTIL → P flex → BN
+  const slotted = useMemo(() => {
+    const unassigned = [...myPlayers]
+    const assigned   = {}
+
+    // Pass 1: exact position matches (C→C, 1B→1B, SP→SP, RP→RP)
+    for (const slot of SLOTS.filter(s => !['UTIL','P','BN'].includes(s.label))) {
+      const idx = unassigned.findIndex(p => slot.eligible.includes(p.pos))
+      if (idx >= 0) {
+        assigned[slot.id] = unassigned.splice(idx, 1)[0]
+      }
+    }
+
+    // Pass 2: UTIL slots
+    for (const slot of SLOTS.filter(s => s.label === 'UTIL')) {
+      const idx = unassigned.findIndex(p => slot.eligible.includes(p.pos))
+      if (idx >= 0) {
+        assigned[slot.id] = unassigned.splice(idx, 1)[0]
+      }
+    }
+
+    // Pass 3: P (SP/RP flex) slots
+    for (const slot of SLOTS.filter(s => s.label === 'P')) {
+      const idx = unassigned.findIndex(p => slot.eligible.includes(p.pos))
+      if (idx >= 0) {
+        assigned[slot.id] = unassigned.splice(idx, 1)[0]
+      }
+    }
+
+    // Pass 4: BN gets whatever is left
+    for (const slot of SLOTS.filter(s => s.label === 'BN')) {
+      if (unassigned.length > 0) {
+        assigned[slot.id] = unassigned.shift()
+      }
+    }
+
+    return assigned
+  }, [myPlayers])
+
+  const GROUP_LABELS = { hitters:'Hitters', pitchers:'Pitchers', bench:'Bench' }
+  let lastGroup = null
+
   return (
     <div style={{ padding:12, display:'grid', gap:12,
       gridTemplateColumns:'1fr 1fr', overflow:'auto' }}>
@@ -848,25 +919,55 @@ function MyTeam({ myPlayers, myTotals, targets, roles, onUndraft, keeperIds }) {
         <div style={{ fontWeight:700, fontSize:13, marginBottom:8 }}>
           My Roster — {myPlayers.length}/24
         </div>
-        {myPlayers.length === 0 && (
-          <div style={{ color:'var(--text3)', fontSize:12 }}>No picks yet.</div>
-        )}
-        {myPlayers.map((p, i) => {
-          const isK = keeperIds.has(p.id)
+        {SLOTS.map(slot => {
+          const player = slotted[slot.id]
+          const isK    = player ? keeperIds.has(player.id) : false
+          const showGroupHeader = slot.group !== lastGroup
+          lastGroup = slot.group
           return (
-            <div key={p.id} style={{ display:'flex', alignItems:'center', gap:8,
-              padding:'5px 8px', borderBottom:'1px solid var(--border)',
-              background: isK ? 'rgba(251,191,36,0.04)' : 'transparent' }}>
-              <span style={{ color:'var(--text3)', fontSize:11, minWidth:20 }}>{i+1}.</span>
-              <span style={{ color:posColor(p.pos), fontWeight:700, fontSize:11, minWidth:28 }}>{p.pos}</span>
-              <span style={{ flex:1, fontSize:12 }}>{p.name}</span>
-              {isK && <span style={{ fontSize:9, color:'var(--yellow)', fontWeight:700,
-                background:'rgba(251,191,36,0.12)', padding:'1px 5px', borderRadius:2 }}>KEPT</span>}
-              <span style={{ fontSize:10, color:'var(--text3)' }}>{p.team}</span>
-              {!isK && (
-                <button className="btn btn-sm btn-ghost" style={{ fontSize:9, padding:'1px 5px' }}
-                  onClick={() => onUndraft(p.id)}>✕</button>
+            <div key={slot.id}>
+              {showGroupHeader && (
+                <div style={{ fontSize:10, fontWeight:700, letterSpacing:'0.1em',
+                  textTransform:'uppercase', color:'var(--text3)',
+                  padding:'8px 0 4px', marginTop: slot.group==='hitters' ? 0 : 6,
+                  borderTop: slot.group==='hitters' ? 'none' : '1px solid var(--border)' }}>
+                  {GROUP_LABELS[slot.group]}
+                </div>
               )}
+              <div style={{ display:'flex', alignItems:'center', gap:6,
+                padding:'4px 0', borderBottom:'1px solid var(--border)',
+                background: isK ? 'rgba(251,191,36,0.03)' : 'transparent',
+                minHeight:30 }}>
+                {/* Slot label */}
+                <span style={{ fontSize:10, fontWeight:700, color:'var(--text3)',
+                  minWidth:32, textAlign:'right', paddingRight:4,
+                  borderRight:'1px solid var(--border)', marginRight:4 }}>
+                  {slot.label}
+                </span>
+                {player ? (
+                  <>
+                    <span style={{ color:posColor(player.pos), fontWeight:700,
+                      fontSize:11, minWidth:26 }}>{player.pos}</span>
+                    <span style={{ flex:1, fontSize:12,
+                      fontWeight: isK ? 600 : 400 }}>{player.name}</span>
+                    {isK && (
+                      <span style={{ fontSize:9, color:'var(--yellow)', fontWeight:700,
+                        background:'rgba(251,191,36,0.12)', padding:'1px 5px',
+                        borderRadius:2, flexShrink:0 }}>KEPT</span>
+                    )}
+                    <span style={{ fontSize:10, color:'var(--text3)',
+                      minWidth:28, textAlign:'right' }}>{player.team}</span>
+                    {!isK && (
+                      <button className="btn btn-sm btn-ghost"
+                        style={{ fontSize:9, padding:'1px 5px', flexShrink:0 }}
+                        onClick={() => onUndraft(player.id)}>✕</button>
+                    )}
+                  </>
+                ) : (
+                  <span style={{ color:'var(--text3)', fontSize:11,
+                    fontStyle:'italic' }}>— empty —</span>
+                )}
+              </div>
             </div>
           )
         })}
