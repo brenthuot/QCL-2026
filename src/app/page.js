@@ -437,7 +437,7 @@ function AppHeader({ round, myCount, draftedTotal, onImport, onReset, tab, setTa
           </span>
           <span style={{ fontSize:11, color:'var(--text3)' }}>Roto · 10-Team · Pick 10</span>
           <span style={{ fontSize:11, color:'var(--text3)' }}>
-            Rd <b style={{ color:'var(--text2)' }}>{round}</b>
+            Next: Rd <b style={{ color:'var(--text2)' }}>{round}</b>
             {' · '}
             <b style={{ color:'var(--text2)' }}>{draftedTotal}</b> drafted
             {' · '}
@@ -1106,7 +1106,7 @@ function Recommendations({ recommendations, round, roles, onDraftMe, onSelectPla
       <div style={{ marginBottom:12 }}>
         <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4 }}>
           <span style={{ fontSize:13, fontWeight:700 }}>⚡ Best Picks Right Now</span>
-          <span style={{ fontSize:11, color:'var(--text3)' }}>Round {round} · Weighted by your category gaps</span>
+          <span style={{ fontSize:11, color:'var(--text3)' }}>Next: Round {round} · Weighted by your category gaps</span>
         </div>
         <div style={{ fontSize:11, color:'var(--text3)', display:'flex', gap:16, flexWrap:'wrap' }}>
           <span>Rankings = z-score × gap weight. Players filling your biggest needs rise to the top.</span>
@@ -1119,11 +1119,7 @@ function Recommendations({ recommendations, round, roles, onDraftMe, onSelectPla
           ⚠ Only {roles.closers}/3 closers — Saves are scarce, act soon.
         </div>
       )}
-      {roles.holdSpec < 2 && round > 10 && (
-        <div className="alert alert-warn" style={{ marginBottom:8 }}>
-          ⚠ Only {roles.holdSpec}/2 hold specialists — HD gap growing.
-        </div>
-      )}
+      {/* HD warning suppressed — hold specialists are waiver-streamable */}
       {roles.winContributors < 4 && round > 8 && (
         <div className="alert alert-warn" style={{ marginBottom:8 }}>
           ⚠ Only {roles.winContributors}/7 win contributors — Wins (W) at risk.
