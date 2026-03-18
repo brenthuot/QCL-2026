@@ -196,11 +196,11 @@ export function buildRecommendations(
   const pitcherSlotsLeft = 9 - pitcherCount
   const hitterSlotsLeft = 15 - hitterCount
 
-  // Pre-compute board rank for all available players (for ADP edge calc)
-  const sortedAvail = [...availablePlayers]
-    .filter(p => !p.drafted)
+  // Pre-compute board rank from FULL pool (including drafted) so rank
+  // stays stable as the draft progresses — avoids edge inflation over time
+  const sortedFull = [...availablePlayers]
     .sort((a, b) => (b.liveScore ?? -99) - (a.liveScore ?? -99))
-  const rankMap = new Map(sortedAvail.map((p, i) => [p.id, i + 1]))
+  const rankMap = new Map(sortedFull.map((p, i) => [p.id, i + 1]))
 
   return availablePlayers
     .filter(p => !p.drafted)
