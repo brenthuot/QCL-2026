@@ -190,9 +190,10 @@ export default function App() {
       // SU: go rounds 13+ → should rank ~120-150 → dampener 0.38
       // RP: generic → dampener 0.35
       // SP: controlled by pitCompress slider (default 0.85)
+      // SU/hold specialists suppressed heavily — streamable on waivers
       const rpDampener = p.pos === 'CL' ? 0.68
-        : p.pos === 'SU' ? 0.38
-        : p.pos === 'RP' ? 0.35
+        : p.pos === 'SU' ? 0.18
+        : p.pos === 'RP' ? 0.18
         : 1.0
       const typeScale = p.type === 'hitter'
         ? hitW * 2
