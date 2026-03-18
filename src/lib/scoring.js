@@ -186,7 +186,8 @@ export function rosterRoles(myPlayers) {
 
 // ── RECOMMENDATION ENGINE ─────────────────────────────────────────────────────
 export function buildRecommendations(
-  availablePlayers, myPlayers, targets, roundNum, myTotals, gapWeights
+  availablePlayers, myPlayers, targets, roundNum, myTotals, gapWeights,
+  boardRankFn
 ) {
   const roles = rosterRoles(myPlayers)
   const hitterCount = myPlayers.filter(p => p.type === 'hitter').length
@@ -195,12 +196,34 @@ export function buildRecommendations(
   const pitcherSlotsLeft = 9 - pitcherCount
   const hitterSlotsLeft = 15 - hitterCount
 
+  // Pre-compute board rank for all available players (for ADP edge calc)
+  const sortedAvail = [...availablePlayers]
+    .filter(p => !p.drafted)
+    .sort((a, b) => (b.liveScore ?? -99) - (a.liveScore ?? -99))
+  const rankMap = new Map(sortedAvail.map((p, i) => [p.id, i + 1]))
+
   return availablePlayers
     .filter(p => !p.drafted)
     .map(p => {
       const { liveScore } = computeLiveScore(p, gapWeights)
       let urgencyBoost = 0
       let reasons = []
+
+      // ── ADP VALUE BOOST ──────────────────────────────────────────────────
+      // Small boost when our rank beats CBS ADP — acts as tiebreaker only.
+      // Only applied when base score is positive (don't rescue negatives).
+      // Capped at +15% so category logic still dominates.
+      let adpBoostPct = 0
+      if (liveScore > 0 && p.cbsADP) {
+        const myRank = rankMap.get(p.id) ?? 999
+        const edge   = myRank - p.cbsADP  // positive = we rank higher (value)
+        if (edge > 20)      adpBoostPct = 0.15
+        else if (edge > 10) adpBoostPct = 0.08
+        else if (edge > 5)  adpBoostPct = 0.03
+        if (adpBoostPct > 0) {
+          reasons.push(`Value pick — ranked #${myRank} vs CBS ADP ${p.cbsADP.toFixed(1)} (+${Math.round(edge)})`)
+        }
+      }
 
       // Pitcher role urgency
       // HD/SU deliberately excluded — hold specialists are waiver-streamable
@@ -239,12 +262,17 @@ export function buildRecommendations(
 
       if (reasons.length === 0) reasons.push('Balanced contributor across categories')
 
+      const adpBoost    = round2(liveScore * adpBoostPct)
+      const finalScore  = liveScore + urgencyBoost + adpBoost
+
       return {
         ...p,
-        liveScore: liveScore + urgencyBoost,
-        baseScore: liveScore,
+        liveScore:    finalScore,
+        baseScore:    liveScore,
         urgencyBoost: round2(urgencyBoost),
-        reasons: reasons.slice(0, 3),
+        adpBoost,
+        adpBoostPct:  round2(adpBoostPct),
+        reasons:      reasons.slice(0, 3),
       }
     })
     .sort((a, b) => b.liveScore - a.liveScore)
