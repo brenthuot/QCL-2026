@@ -356,6 +356,7 @@ export default function App() {
             <Recommendations recommendations={recommendations}
               round={round} roles={roles}
               onDraftMe={p => markDrafted(p, true)}
+              onSelectPlayer={setSelectedPlayer}
             />
           )}
           {tab === 'pool' && (
@@ -992,7 +993,7 @@ function CategoryDashboard({ myTotals, targets, gapWeights }) {
 }
 
 // ── RECOMMENDATIONS ───────────────────────────────────────────────────────────
-function Recommendations({ recommendations, round, roles, onDraftMe }) {
+function Recommendations({ recommendations, round, roles, onDraftMe, onSelectPlayer }) {
   return (
     <div style={{ padding:12, overflow:'auto' }}>
       <div style={{ marginBottom:12 }}>
@@ -1024,7 +1025,8 @@ function Recommendations({ recommendations, round, roles, onDraftMe }) {
       <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
         {recommendations.map((p, i) => (
           <div key={p.id} className={`rec-card ${i===0?'top':''}`}
-            style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
+            onClick={() => onSelectPlayer(p)}
+            style={{ display:'flex', gap:12, alignItems:'flex-start', cursor:'pointer' }}>
             <div style={{ minWidth:24, fontSize:18, fontWeight:700,
               color:i===0?'var(--tier1)':'var(--text3)', paddingTop:2 }}>{i+1}</div>
             <div style={{ flex:1 }}>
