@@ -20,7 +20,6 @@ export function parseFantasyProsRound(text, myTeamName = 'numbahs') {
   const lines = text
     .split('\n')
     .map(l => l.trim())
-    // Strip headshot lines and other noise before parsing
     .filter(l =>
       l.length > 0 &&
       !l.toLowerCase().startsWith('headshot of') &&
@@ -36,7 +35,6 @@ export function parseFantasyProsRound(text, myTeamName = 'numbahs') {
   while (i < lines.length - 3) {
     const maybePick = lines[i + 1]
 
-    // Match standard pick (1.05) or keeper (KPR)
     const isRegularPick = /^\d+\.\d+$/.test(maybePick)
     const isKeeper      = /^KPR$/i.test(maybePick)
 
@@ -51,14 +49,11 @@ export function parseFantasyProsRound(text, myTeamName = 'numbahs') {
 
       if (isRegularPick) {
         const [roundStr, pinStr] = pickStr.split('.')
-        round        = parseInt(roundStr)
-        pickInRound  = parseInt(pinStr)
-        overallPick  = (round - 1) * 10 + pickInRound
+        round       = parseInt(roundStr)
+        pickInRound = parseInt(pinStr)
+        overallPick = (round - 1) * 10 + pickInRound
       }
-      // Keepers: round/pick unknown from paste, mark round=0
-      // They'll already be in draftedIds so no harm done
 
-      // Skip if player name looks like noise
       if (player && player !== 'Edit' && !/^\d/.test(player)) {
         picks.push({
           pick: overallPick,
@@ -82,30 +77,43 @@ export function parseFantasyProsRound(text, myTeamName = 'numbahs') {
   return picks
 }
 
-// Fuzzy match a FantasyPros abbreviated name (e.g. "B. Witt") to our player list
-// Returns matched player or null
-export function matchPlayer(fpName, players) {
-  const norm = s => s.toLowerCase()
+// ── NAME MATCHING ─────────────────────────────────────────────────────────────
+// Suffixes that should be ignored when finding the true last name
+const SUFFIXES = new Set(['jr', 'sr', 'ii', 'iii', 'iv'])
+
+function normName(s) {
+  return String(s).toLowerCase()
     .replace(/[àáâãäå]/g,'a').replace(/[èéêë]/g,'e')
     .replace(/[ìíîï]/g,'i').replace(/[òóôõö]/g,'o')
     .replace(/[ùúûü]/g,'u').replace(/ñ/g,'n')
     .replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim()
+}
 
-  const normFP = norm(fpName)
+// Returns the last non-suffix word from a parts array
+// e.g. ["bobby","witt","jr"] → "witt"
+function trueLastName(parts) {
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (!SUFFIXES.has(parts[i])) return parts[i]
+  }
+  return parts[parts.length - 1]
+}
 
-  // Exact match first
-  const exact = players.find(p => norm(p.name) === normFP)
+// Fuzzy match a FantasyPros abbreviated name (e.g. "B. Witt", "F. Tatis Jr.")
+// to our player list. Returns matched player or null.
+export function matchPlayer(fpName, players) {
+  const normFP  = normName(fpName)
+  const fpParts = normFP.split(' ')
+  const fpLast  = trueLastName(fpParts)           // "witt" from "b witt jr"
+  const fpFirst = fpParts[0].replace('.', '')      // first initial or full name
+
+  // 1. Exact match
+  const exact = players.find(p => normName(p.name) === normFP)
   if (exact) return exact
 
-  // Abbreviated first name: "B. Witt Jr." → first initial + last name
-  const fpParts = normFP.split(' ')
-  const fpLast  = fpParts[fpParts.length - 1]
-  const fpFirst = fpParts[0].replace('.', '')
-
-  // Last name + first initial
+  // 2. True last name + first initial
   const lastMatch = players.filter(p => {
-    const pn    = norm(p.name).split(' ')
-    const pLast  = pn[pn.length - 1]
+    const pn     = normName(p.name).split(' ')
+    const pLast  = trueLastName(pn)
     const pFirst = pn[0]?.[0] ?? ''
     return pLast === fpLast && pFirst === fpFirst[0]
   })
@@ -114,12 +122,15 @@ export function matchPlayer(fpName, players) {
     return lastMatch.sort((a, b) => (b.FPTS ?? 0) - (a.FPTS ?? 0))[0]
   }
 
-  // Last name only (fallback)
+  // 3. True last name only (fallback — picks highest FPTS if multiple)
   const lastOnly = players.filter(p => {
-    const pn = norm(p.name).split(' ')
-    return pn[pn.length - 1] === fpLast
+    const pn = normName(p.name).split(' ')
+    return trueLastName(pn) === fpLast
   })
   if (lastOnly.length === 1) return lastOnly[0]
+  if (lastOnly.length > 1) {
+    return lastOnly.sort((a, b) => (b.FPTS ?? 0) - (a.FPTS ?? 0))[0]
+  }
 
   return null
 }
