@@ -58,10 +58,8 @@ export function computeGapWeights(myTotals, targets, roundNum = 1, sensitivity =
     weights['S'] = Math.min(2.5, (weights['S'] ?? 1) * 1.2)
   }
 
-  // HD (Holds): only boost round 11+ — hold specs are genuinely round 12-13 targets
-  if (roundNum >= 11) {
-    weights['HD'] = Math.min(2.0, (weights['HD'] ?? 1) * 1.1)
-  }
+  // HD (Holds): no scarcity boost — hold specialists are waiver-streamable,
+  // draft them only if they fall to you, never chase them
 
   return weights
 }
