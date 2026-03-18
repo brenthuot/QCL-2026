@@ -45,21 +45,19 @@ export function computeGapWeights(myTotals, targets, roundNum = 1, sensitivity =
     weights[cat] = Math.max(0.2, Math.min(2.5, (0.2 + gap * 2.3) * sensitivity))
   }
 
-  // Scarcity boosts — calibrated from 10-team mock draft:
-  // Top closers (Diaz/Miller/Munoz) go rounds 4–5, 2nd tier rounds 7–9
-  // Hold specialists don't go until rounds 12–13
-  // So: don't boost S/HD early — it was pushing closers into top 10 wrongly
-
   // SB: always thin, mild boost throughout
   weights['SB'] = Math.min(3.0, (weights['SB'] ?? 1) * 1.15)
 
-  // S (Saves): boost from round 7+ only — after hitting core is built
-  if (roundNum >= 7) {
-    weights['S'] = Math.min(2.5, (weights['S'] ?? 1) * 1.2)
-  }
+  // S (Saves): hard-cap gap weight by round — don't let a 0/115 total
+  // create a 2.5 weight that inflates every closer artificially
+  // Round 1-4: cap at 0.4 (ignore saves, build hitting core)
+  // Round 5-6: cap at 0.8 (slight awareness)
+  // Round 7+:  cap at 1.6 (actively target)
+  const sCap = roundNum <= 4 ? 0.4 : roundNum <= 6 ? 0.8 : 1.6
+  weights['S'] = Math.min(sCap, weights['S'] ?? 1)
 
-  // HD (Holds): no scarcity boost — hold specialists are waiver-streamable,
-  // draft them only if they fall to you, never chase them
+  // HD (Holds): hard-cap at 0.3 always — waiver-streamable, never draft for
+  weights['HD'] = Math.min(0.3, weights['HD'] ?? 1)
 
   return weights
 }
@@ -206,8 +204,8 @@ export function buildRecommendations(
       // HD/SU deliberately excluded — hold specialists are waiver-streamable
       if (p.type === 'pitcher') {
         if (p.pos === 'CL' && roles.closers < 3) {
-          // Only boost closers from round 7+ — don't chase saves in rounds 1-6
-          const saveUrgency = roundNum >= 7 ? 1.5 : roundNum >= 5 ? 0.6 : 0
+          // Only boost closers from round 7+ — gap weights already handle earlier rounds
+          const saveUrgency = roundNum >= 7 ? 1.5 : 0
           urgencyBoost += saveUrgency
           if (saveUrgency > 0) reasons.push(`Need closers (${roles.closers}/3) — S gap`)
         }
