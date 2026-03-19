@@ -60,6 +60,10 @@ const WATCHLIST = [
   { name:"Brendan Donovan",   abbr:"Donovan",      pos:"2B",    rdLo:23, rdHi:23, stars:1, note:"R23 EVERY mock; free" },
   { name:"Max Muncy",         abbr:"Muncy",        pos:"3B",    rdLo:23, rdHi:24, stars:1, note:"R23-24; near undrafted value" },
   { name:"JJ Wetherholt",     abbr:"Wetherholt",   pos:"SS",    rdLo:24, rdHi:24, stars:2, note:"R24 EVERY mock; always available" },
+  // Additional targets — watchlist only (speculative/late)
+  { name:"Andrew Vaughn",     abbr:"A.Vaughn",     pos:"1B",    rdLo:16, rdHi:22, stars:1, note:"0/5 mocks drafted; pure late value 1B" },
+  { name:"Thomas White",      abbr:"T.White",      pos:"SP",    rdLo:18, rdHi:24, stars:1, note:"0/5 mocks; MIA upside arm — pure spec" },
+  { name:"Kevin McGonigle",   abbr:"McGonigle",    pos:"SS",    rdLo:14, rdHi:20, stars:2, note:"1/5 mocks at R18; sleeper SS prospect" },
 ]
 
 const MY_KEEPERS = KEEPERS.filter(k => k.team === MY_TEAM)
@@ -353,11 +357,12 @@ export default function App() {
   )
 
   const tabs = [
-    {id:'board', label:'🎯 Draft Board'},
-    {id:'team',  label:`⚾ My Team${myPlayers.length > 0 ? ` ${myPlayers.length}` : ''}`},
-    {id:'cats',  label:'📊 Categories'},
-    {id:'rec',   label:'⚡ Recs'},
-    {id:'pool',  label:'🔍 Full Pool'},
+    {id:'board',    label:'🎯 Draft Board'},
+    {id:'team',     label:`⚾ My Team${myPlayers.length > 0 ? ` ${myPlayers.length}` : ''}`},
+    {id:'cats',     label:'📊 Categories'},
+    {id:'rec',      label:'⚡ Recs'},
+    {id:'strategy', label:'📋 Strategy'},
+    {id:'pool',     label:'🔍 Full Pool'},
   ]
 
   return (
@@ -396,7 +401,8 @@ export default function App() {
           {tab==='team'  && 'Your roster + 12-cat progress bars vs JRH targets'}
           {tab==='cats'  && 'Category gap analysis sorted by urgency · updates after every pick'}
           {tab==='rec'   && 'Best pick right now · weighted by your category gaps and role needs'}
-          {tab==='pool'  && 'All players · sortable by any stat · use to look up anyone'}
+          {tab==='pool'     && 'All players · sortable by any stat · use to look up anyone'}
+          {tab==='strategy' && 'Your pick slots + mock-calibrated targets at each window'}
         </div>
       </div>
 
@@ -456,6 +462,9 @@ export default function App() {
             <Recommendations recommendations={recommendations} round={round} roles={roles}
               onDraftMe={p => markDrafted(p,true)} onSelectPlayer={setSelectedPlayer}
             />
+          )}
+          {tab==='strategy' && (
+            <StrategySheet round={round} myPlayers={myPlayers} draftedIds={draftedIds} scoredPlayers={scoredPlayers} />
           )}
           {tab==='pool' && (
             <FullPool players={scoredPlayers} fullRankMap={fullRankMap}
@@ -544,19 +553,40 @@ function Sidebar({ diagnostics, hitWeight, setHitWeight, pitCompress, setPitComp
         <DiagRow label="RP in Top 50"  val={diagnostics.rpIn50}  lo={5} hi={10} />
       </SidebarSection>
 
+      {/* At Risk — targets whose window opens this round or next */}
+      {(() => {
+        const atRisk = watchlistAvail.filter(w => !w.drafted && w.rdLo <= round + 1 && w.rdLo >= round - 1)
+        if (!atRisk.length) return null
+        return (
+          <div style={{background:'rgba(251,191,36,0.07)',borderBottom:'2px solid rgba(251,191,36,0.3)',padding:'6px 12px'}}>
+            <div style={{fontSize:10,fontWeight:700,color:'var(--yellow)',letterSpacing:'0.1em',marginBottom:4}}>⚡ TARGET NOW</div>
+            {atRisk.map(w => (
+              <div key={w.name} style={{display:'flex',justifyContent:'space-between',padding:'2px 0',fontSize:11}}>
+                <span style={{color:'var(--yellow)',fontWeight:700}}>{'⭐'.repeat(w.stars)} {w.abbr}</span>
+                <span style={{color:'var(--yellow)',fontSize:10}}>R{w.rdLo}{w.rdLo!==w.rdHi?`–${w.rdHi}`:''}</span>
+              </div>
+            ))}
+          </div>
+        )
+      })()}
+
       {/* Watchlist */}
       <SidebarSection title="🎯 Watchlist" hint="Mock-calibrated targets with expected round windows">
         {watchlistAvail.map(w => {
+          const inWindow = !w.drafted && round >= w.rdLo - 1 && round <= w.rdHi + 1
           const stars = '⭐'.repeat(w.stars)
-          const color = w.drafted ? 'var(--text3)' : w.rdLo <= round + 2 ? 'var(--yellow)' : 'var(--text2)'
+          const color = w.drafted&&!w.isKeeper ? 'var(--text3)' : inWindow ? 'var(--yellow)' : 'var(--text2)'
           return (
-            <div key={w.name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'2px 0',borderBottom:'1px solid var(--border)',opacity:w.drafted&&!w.isKeeper?0.4:1}}>
+            <div key={w.name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',
+              padding:'2px 0',borderBottom:'1px solid var(--border)',
+              opacity:w.drafted&&!w.isKeeper?0.4:1,
+              background:inWindow?'rgba(251,191,36,0.04)':undefined}}>
               <div style={{display:'flex',alignItems:'center',gap:4}}>
                 <span style={{fontSize:8}}>{stars}</span>
-                <span style={{color,fontSize:11}}>{w.abbr}</span>
+                <span style={{color,fontSize:11,fontWeight:inWindow?700:400}}>{w.abbr}</span>
                 <span style={{color:'var(--text3)',fontSize:9}}>{w.pos}</span>
               </div>
-              <span style={{fontSize:10,color:w.drafted&&!w.isKeeper?'var(--text3)':color,fontWeight:600}}>
+              <span style={{fontSize:10,color:w.drafted&&!w.isKeeper?'var(--text3)':color,fontWeight:inWindow?700:400}}>
                 {w.drafted && !w.isKeeper ? 'GONE' : `R${w.rdLo}${w.rdLo!==w.rdHi?`–${w.rdHi}`:''}`}
               </span>
             </div>
@@ -1316,6 +1346,145 @@ function ImportModal({ text, setText, msg, setMsg, onParse, onClose, myCount }) 
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={onParse}>Parse Round</button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── STRATEGY SHEET ────────────────────────────────────────────────────────────
+const PICK_STRATEGY = [
+  { round:1,  pick:'1.10', overall:10,  keeper:false, notes:"Best elite hitter available — Henderson, Lindor, or Devers always here. Don't reach for SP.",
+    targets:[] },
+  { round:2,  pick:'2.01', overall:11,  keeper:false, notes:"Snake turn — picks 10+11 back-to-back. Jackson Chourio (3/5 mocks at 2.01) or Cal Raleigh for C.",
+    targets:["Jackson Chourio","Cal Raleigh"] },
+  { round:3,  pick:'3.10', overall:30,  keeper:false, notes:"Matt Olson, Yordan Alvarez, Freddie Freeman, or first elite SP window (Logan Webb).",
+    targets:[] },
+  { round:4,  pick:'4.01', overall:31,  keeper:false, notes:"Brice Turang goes R3-4 in ALL 5 mocks — steal at 4.01 if available.",
+    targets:["Brice Turang"] },
+  { round:5,  pick:'5.10', overall:50,  keeper:false, notes:"Jarren Duran realistic here (R4-6 avg). Mason Miller / Cade Smith if CL needed.",
+    targets:["Jarren Duran"] },
+  { round:6,  pick:'6.01', overall:51,  keeper:false, notes:"Geraldo Perdomo goes R6-7 every mock — grab him here if available.",
+    targets:["Geraldo Perdomo"] },
+  { round:7,  pick:'7.10', overall:70,  keeper:false, notes:"Maikel Garcia goes R7 in ALL 5 mocks — must-take at 7.10. If Perdomo still here, grab him.",
+    targets:["Maikel Garcia","Geraldo Perdomo"] },
+  { round:8,  pick:'8.01', overall:71,  keeper:false, notes:"Mid-tier SP or hitter. Nolan McLean, Dylan Cease, or strong hitter value.",
+    targets:[] },
+  { round:9,  pick:'9.10', overall:90,  keeper:false, notes:"Trey Yesavage sometimes here (R10-13). Start targeting upside arms.",
+    targets:["Trey Yesavage"] },
+  { round:10, pick:'10.01', overall:91, keeper:false, notes:"Jacob Misiorowski goes R10-11 every mock — goes earlier than people expect. Also Agustin Ramirez for C.",
+    targets:["Jacob Misiorowski","Agustin Ramirez"] },
+  { round:11, pick:'11.10', overall:110, keeper:false, notes:"Kyle Stowers R11-13 consistent. Trey Yesavage if still available.",
+    targets:["Kyle Stowers","Trey Yesavage"] },
+  { round:12, pick:'12.01', overall:111, keeper:false, notes:"Emmet Sheehan (R12-14), Cam Schlittler (R12-13). Sweet spot for upside arms.",
+    targets:["Emmet Sheehan","Cam Schlittler"] },
+  { round:13, pick:'13.10', overall:130, keeper:false, notes:"Trevor Rogers R13-14. Konnor Griffin wildly inconsistent (R13-22) — let him fall to you.",
+    targets:["Trevor Rogers","Konnor Griffin"] },
+  { round:14, pick:'14.01', overall:131, keeper:true,  notes:"🔒 KEEPER: Junior Caminero (free pick). One of the best keeper values in the league.",
+    targets:["Junior Caminero"] },
+  { round:15, pick:'15.10', overall:150, keeper:false, notes:"Bubba Chandler goes R15-18 in EVERY mock. High upside — take him here.",
+    targets:["Bubba Chandler"] },
+  { round:16, pick:'16.01', overall:151, keeper:false, notes:"Andrew Vaughn or upside late SP. Kevin McGonigle (sleeper SS) appeared at R18 in 1 mock.",
+    targets:["Andrew Vaughn"] },
+  { round:17, pick:'17.10', overall:170, keeper:false, notes:"Thomas White (SP-MIA) upside. Jac Caglianone starting to appear (4/5 mocks).",
+    targets:["Thomas White","Jac Caglianone"] },
+  { round:18, pick:'18.01', overall:171, keeper:false, notes:"Kevin McGonigle sleeper window. Jonathan Aranda inconsistent but sometimes here.",
+    targets:["Kevin McGonigle","Jonathan Aranda"] },
+  { round:19, pick:'19.10', overall:190, keeper:true,  notes:"🔒 KEEPER: Cristopher Sanchez (free pick). Solid SP value locked in.",
+    targets:["Cristopher Sanchez"] },
+  { round:20, pick:'20.01', overall:191, keeper:false, notes:"Alejandro Kirk C goes R19-20 in EVERY mock — reliable late C depth.",
+    targets:["Alejandro Kirk"] },
+  { round:21, pick:'21.10', overall:210, keeper:false, notes:"Addison Barger R21-23 consistent. Jac Caglianone still available.",
+    targets:["Addison Barger","Jac Caglianone"] },
+  { round:22, pick:'22.01', overall:211, keeper:false, notes:"Jonathan Aranda sometimes still here. Sal Stewart near-undrafted.",
+    targets:["Jonathan Aranda","Sal Stewart"] },
+  { round:23, pick:'23.10', overall:230, keeper:false, notes:"Brendan Donovan goes R23 in ALL 5 mocks — free value. Max Muncy near-undrafted.",
+    targets:["Brendan Donovan","Max Muncy"] },
+  { round:24, pick:'24.01', overall:231, keeper:false, notes:"JJ Wetherholt goes R24 in EVERY mock — always available, always worth taking.",
+    targets:["JJ Wetherholt"] },
+]
+
+function StrategySheet({ round, myPlayers, draftedIds, scoredPlayers }) {
+  const myCount = myPlayers.length
+
+  return (
+    <div style={{padding:12,overflow:'auto'}}>
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>📋 Draft Strategy Cheat Sheet
+          <span style={{fontSize:11,fontWeight:400,color:'var(--text3)',marginLeft:8}}>Pick 10 · Calibrated from 5 mock drafts</span>
+        </div>
+        <div style={{fontSize:11,color:'var(--text3)',display:'flex',gap:16,flexWrap:'wrap'}}>
+          <span>🔒 = keeper slot (auto-filled)</span>
+          <span>⚡ = current round</span>
+          <span>✓ = pick made</span>
+        </div>
+      </div>
+
+      <div style={{display:'flex',flexDirection:'column',gap:6}}>
+        {PICK_STRATEGY.map(slot => {
+          const isCurrent = slot.round === round && !slot.keeper
+          const isPast    = slot.overall < (myCount + 1) * 1 // rough
+          const isDone    = slot.keeper || (slot.round < round)
+          const isKeeper  = slot.keeper
+
+          // Check if targets are still available
+          const targetStatus = slot.targets.map(name => {
+            const p = scoredPlayers.find(sp =>
+              name.toLowerCase().split(' ').every(part => sp.name.toLowerCase().includes(part.slice(0,4)))
+            )
+            return { name, drafted: p?.drafted ?? false, isKeeper: p?.isKeeper ?? false }
+          })
+
+          return (
+            <div key={slot.round} className={`card`} style={{
+              borderLeft: `3px solid ${
+                isKeeper      ? 'var(--yellow)' :
+                isCurrent     ? 'var(--blue)'   :
+                isDone        ? 'var(--border)'  :
+                                'var(--border2)'
+              }`,
+              opacity: isDone && !isKeeper ? 0.55 : 1,
+              background: isCurrent ? 'rgba(59,130,246,0.06)' : undefined,
+              padding:'10px 12px',
+            }}>
+              <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
+                <div style={{minWidth:60}}>
+                  <div style={{fontSize:10,color:'var(--text3)'}}>
+                    {isCurrent ? '⚡ NOW' : isKeeper ? '🔒 KEPT' : isDone ? '✓ Done' : `Pick`}
+                  </div>
+                  <div style={{fontSize:16,fontWeight:700,
+                    color:isKeeper?'var(--yellow)':isCurrent?'var(--blue2)':isDone?'var(--text3)':'var(--text)'}}>
+                    {slot.pick}
+                  </div>
+                  <div style={{fontSize:10,color:'var(--text3)'}}>#{slot.overall}</div>
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12,color:'var(--text2)',marginBottom:6,lineHeight:1.4}}>
+                    {slot.notes}
+                  </div>
+                  {targetStatus.length > 0 && (
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                      {targetStatus.map(t => (
+                        <span key={t.name} style={{
+                          fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:3,
+                          background: t.isKeeper  ? 'rgba(251,191,36,0.15)' :
+                                      t.drafted   ? 'rgba(255,255,255,0.05)' :
+                                                    'rgba(59,130,246,0.12)',
+                          color:      t.isKeeper  ? 'var(--yellow)' :
+                                      t.drafted   ? 'var(--text3)' :
+                                                    'var(--blue2)',
+                          border:     `1px solid ${t.isKeeper?'rgba(251,191,36,0.3)':t.drafted?'var(--border)':'rgba(59,130,246,0.25)'}`,
+                          textDecoration: t.drafted && !t.isKeeper ? 'line-through' : 'none',
+                        }}>
+                          {t.name}{t.drafted&&!t.isKeeper?' (gone)':t.isKeeper?' (kept)':''}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
