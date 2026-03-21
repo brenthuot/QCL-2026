@@ -357,60 +357,62 @@ export default function App() {
   )
 
   const tabs = [
-    {id:'board',    label:'🎯 Draft Board'},
-    {id:'team',     label:`⚾ My Team${myPlayers.length > 0 ? ` ${myPlayers.length}` : ''}`},
-    {id:'cats',     label:'📊 Categories'},
-    {id:'rec',      label:'⚡ Recs'},
-    {id:'strategy', label:'📋 Strategy'},
-    {id:'pool',     label:'🔍 Full Pool'},
+    {id:'board',    label:'Draft Board'},
+    {id:'team',     label:'My Team', count: myPlayers.length},
+    {id:'cats',     label:'Categories'},
+    {id:'rec',      label:'Recs'},
+    {id:'strategy', label:'Strategy'},
+    {id:'pool',     label:'Full Pool'},
   ]
 
   return (
     <div style={{display:'flex',flexDirection:'column',height:'100vh',overflow:'hidden'}}>
 
-      {/* HEADER */}
-      <div style={{background:'var(--bg2)',borderBottom:'1px solid var(--border2)'}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'7px 14px'}}>
-          <div style={{display:'flex',alignItems:'center',gap:14}}>
-            <span style={{fontSize:15,fontWeight:700,color:'var(--blue2)',letterSpacing:'0.06em'}}>⚾ QCL 2026</span>
-            <span style={{fontSize:11,color:'var(--text3)'}}>Roto · 10-Team · Pick&nbsp;10</span>
-            {nextPick && (
-              <span style={{fontSize:11,fontWeight:700,color:'var(--tier1)',background:'rgba(251,191,36,0.1)',padding:'2px 8px',borderRadius:3,border:'1px solid rgba(251,191,36,0.3)'}}>
-                ▲ Pick {nextPick.round}.{String(nextPick.pick).padStart(2,'0')}
-              </span>
-            )}
-            <span style={{fontSize:11,color:'var(--text3)'}}>
-              Rd <b style={{color:'var(--text2)'}}>{round}</b>
-              {' · '}<b style={{color:'var(--text2)'}}>{nonKeeperDrafted}</b> drafted
-              {' · '}<b style={{color:'var(--blue2)'}}>{myPlayers.length}</b>/24 mine
+      {/* HEADER — matches FOF style */}
+      <div style={{background:'var(--bg2)',borderBottom:'1px solid var(--border2)',padding:'0 14px',display:'flex',alignItems:'center',justifyContent:'space-between',height:48,flexShrink:0}}>
+        {/* Left: hamburger + logo + meta + tabs */}
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <button onClick={() => setSidebarOpen(v => !v)} style={{background:'none',border:'none',color:'var(--text3)',cursor:'pointer',fontSize:16,padding:'4px 6px'}}>☰</button>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <span style={{fontSize:14,fontWeight:700,color:'var(--text)'}}>⚾ QCL 2026</span>
+            <span style={{fontSize:11,color:'var(--text3)',borderLeft:'1px solid var(--border2)',paddingLeft:8}}>Roto · 10-Team · Pick 10</span>
+          </div>
+          <div style={{borderLeft:'1px solid var(--border2)',paddingLeft:12}}>
+            <div className="tab-pills">
+              {tabs.map(t => (
+                <div key={t.id} className={`tab-pill ${tab===t.id?'active':''}`} onClick={() => setTab(t.id)}>
+                  {t.label}{t.count ? <span style={{marginLeft:4,background:'var(--blue)',color:'#fff',borderRadius:10,padding:'0 5px',fontSize:10,fontWeight:700}}>{t.count}</span> : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        {/* Right: pick badge + actions */}
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          {nextPick && (
+            <span style={{fontSize:11,fontWeight:700,color:'var(--tier1)',background:'rgba(251,191,36,0.1)',padding:'3px 10px',borderRadius:5,border:'1px solid rgba(251,191,36,0.35)'}}>
+              ▲ Pick {nextPick.round}.{String(nextPick.pick).padStart(2,'0')}
             </span>
-          </div>
-          <div style={{display:'flex',gap:6}}>
-            <button className="btn btn-primary btn-sm" onClick={() => setShowImport(true)}>📥 Import Round</button>
-            <button className="btn btn-ghost btn-sm" onClick={() => setShowReset(true)}>↺ Reset</button>
-          </div>
-        </div>
-        <div className="tab-nav" style={{padding:'0 14px'}}>
-          {tabs.map(t => (
-            <div key={t.id} className={`tab-item ${tab===t.id?'active':''}`} onClick={() => setTab(t.id)}>{t.label}</div>
-          ))}
-        </div>
-        {/* Active tab description */}
-        <div style={{padding:'2px 14px 3px',fontSize:10,color:'var(--text3)',borderTop:'1px solid var(--border)',background:'var(--bg)'}}>
-          {tab==='board' && 'Live-ranked board · M = mine · D = other team drafted · click any row for details'}
-          {tab==='team'  && 'Your roster + 12-cat progress bars vs JRH targets'}
-          {tab==='cats'  && 'Category gap analysis sorted by urgency · updates after every pick'}
-          {tab==='rec'   && 'Best pick right now · weighted by your category gaps and role needs'}
-          {tab==='pool'     && 'All players · sortable by any stat · use to look up anyone'}
-          {tab==='strategy' && 'Your pick slots + mock-calibrated targets at each window'}
+          )}
+          <span style={{fontSize:11,color:'var(--text3)'}}>
+            <b style={{color:'var(--blue2)'}}>{myPlayers.length}</b> my picks
+          </span>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowImport(true)}>📥 Import Round</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowReset(true)}>↺ Reset Draft</button>
         </div>
       </div>
 
       {/* BODY */}
       <div style={{flex:1,display:'flex',overflow:'hidden'}}>
 
-        {/* SIDEBAR */}
-        {sidebarOpen ? (
+        {/* SIDEBAR — always rendered, toggled via width */}
+        <div style={{
+          width: sidebarOpen ? 240 : 0,
+          minWidth: sidebarOpen ? 240 : 0,
+          overflow: 'hidden',
+          transition: 'width 0.2s, min-width 0.2s',
+          flexShrink: 0,
+        }}>
           <Sidebar
             diagnostics={diagnostics}
             hitWeight={hitWeight} setHitWeight={setHitWeight}
@@ -420,14 +422,7 @@ export default function App() {
             scoredPlayers={scoredPlayers}
             onClose={() => setSidebarOpen(false)}
           />
-        ) : (
-          <button onClick={() => setSidebarOpen(true)}
-            style={{writingMode:'vertical-rl',padding:'12px 6px',background:'var(--bg2)',
-              border:'none',borderRight:'1px solid var(--border)',
-              color:'var(--text3)',fontSize:11,cursor:'pointer',letterSpacing:'0.1em'}}>
-            ▶ CONTROLS
-          </button>
-        )}
+        </div>
 
         {/* MAIN */}
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
@@ -522,188 +517,146 @@ export default function App() {
 
 // ── SIDEBAR ───────────────────────────────────────────────────────────────────
 function Sidebar({ diagnostics, hitWeight, setHitWeight, pitCompress, setPitCompress,
-                   gapSensitivity, setGapSensitivity, roles, round, scoredPlayers, onClose }) {
+                   gapSensitivity, setGapSensitivity, roles, round, scoredPlayers }) {
 
-  const watchlistAvail = useMemo(() => {
-    return WATCHLIST.map(w => {
-      const p = scoredPlayers.find(sp => normName(sp.name).includes(normName(w.name).split(' ')[0]) &&
-        normName(sp.name).includes(normName(w.name).split(' ').slice(-1)[0].slice(0,4)))
-      return { ...w, drafted: p?.drafted ?? false, isKeeper: p?.isKeeper ?? false }
-    })
-  }, [scoredPlayers])
+  const watchlistAvail = useMemo(() => WATCHLIST.map(w => {
+    const p = scoredPlayers.find(sp =>
+      normName(sp.name).includes(normName(w.name).split(' ')[0]) &&
+      normName(sp.name).includes(normName(w.name).split(' ').slice(-1)[0].slice(0,4)))
+    return { ...w, drafted: p?.drafted ?? false, isKeeper: p?.isKeeper ?? false }
+  }), [scoredPlayers])
+
+  const SB = ({ label, children }) => (
+    <div style={{marginBottom:20}}>
+      <div style={{fontSize:10,fontWeight:600,letterSpacing:'0.1em',textTransform:'uppercase',
+        color:'var(--text3)',marginBottom:8}}>{label}</div>
+      {children}
+    </div>
+  )
 
   return (
-    <div style={{width:234,minWidth:234,background:'var(--bg2)',borderRight:'1px solid var(--border)',overflowY:'auto',display:'flex',flexDirection:'column',fontSize:12}}>
+    <div style={{width:240,minWidth:240,height:'100%',background:'var(--bg2)',
+      borderRight:'1px solid var(--border2)',overflowY:'auto',fontSize:12,
+      padding:'14px 14px 20px'}}>
 
-      <div style={{padding:'10px 12px 6px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-        <span style={{fontWeight:700,fontSize:11,letterSpacing:'0.1em',color:'var(--text2)',textTransform:'uppercase'}}>Model Controls</span>
-        <button onClick={onClose} style={{background:'none',border:'none',color:'var(--text3)',cursor:'pointer',fontSize:14}}>◀</button>
-      </div>
-      <div style={{padding:'4px 12px 6px',fontSize:10,color:'var(--text3)',borderBottom:'1px solid var(--border)'}}>
-        All rankings update instantly as you adjust settings.
-      </div>
+      <SB label="Model Controls">
+        <div style={{fontSize:11,color:'var(--text3)',marginBottom:12,lineHeight:1.4}}>
+          All rankings update instantly as you adjust settings.
+        </div>
 
-      {/* Live Diagnostics */}
-      <SidebarSection title="Live Diagnostics" hint="Are SPs & closers ranked high enough?">
-        <DiagRow label="SP in Top 20"  val={diagnostics.spIn20}  lo={3} hi={5} />
-        <DiagRow label="SP in Top 50"  val={diagnostics.spIn50}  lo={10} hi={16} />
-        <DiagRow label="SP in Top 100" val={diagnostics.spIn100} lo={22} hi={30} />
-        <DiagRow label="CL in Top 20"  val={diagnostics.clIn20}  lo={1} hi={3} />
-        <DiagRow label="CL in Top 50"  val={diagnostics.clIn50}  lo={3} hi={6} />
-        <DiagRow label="RP in Top 50"  val={diagnostics.rpIn50}  lo={5} hi={10} />
-      </SidebarSection>
-
-      {/* At Risk — targets whose window opens this round or next */}
-      {(() => {
-        const atRisk = watchlistAvail.filter(w => !w.drafted && w.rdLo <= round + 1 && w.rdLo >= round - 1)
-        if (!atRisk.length) return null
-        return (
-          <div style={{background:'rgba(251,191,36,0.07)',borderBottom:'2px solid rgba(251,191,36,0.3)',padding:'6px 12px'}}>
-            <div style={{fontSize:10,fontWeight:700,color:'var(--yellow)',letterSpacing:'0.1em',marginBottom:4}}>⚡ TARGET NOW</div>
-            {atRisk.map(w => (
-              <div key={w.name} style={{display:'flex',justifyContent:'space-between',padding:'2px 0',fontSize:11}}>
-                <span style={{color:'var(--yellow)',fontWeight:700}}>{'⭐'.repeat(w.stars)} {w.abbr}</span>
-                <span style={{color:'var(--yellow)',fontSize:10}}>R{w.rdLo}{w.rdLo!==w.rdHi?`–${w.rdHi}`:''}</span>
-              </div>
-            ))}
-          </div>
-        )
-      })()}
-
-      {/* Watchlist */}
-      <SidebarSection title="🎯 Watchlist" hint="Mock-calibrated targets with expected round windows">
-        {watchlistAvail.map(w => {
-          const inWindow = !w.drafted && round >= w.rdLo - 1 && round <= w.rdHi + 1
-          const stars = '⭐'.repeat(w.stars)
-          const color = w.drafted&&!w.isKeeper ? 'var(--text3)' : inWindow ? 'var(--yellow)' : 'var(--text2)'
+        {/* Diagnostics */}
+        <div style={{fontSize:10,fontWeight:600,color:'var(--text3)',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:6}}>Live Diagnostics</div>
+        {[
+          {label:'P in Top 20',  val:diagnostics.spIn20,  lo:3,  hi:5,  ok:'4–6'},
+          {label:'P in Top 50',  val:diagnostics.spIn50,  lo:10, hi:16, ok:'12–16'},
+          {label:'P in Top 100', val:diagnostics.spIn100, lo:22, hi:30, ok:'25–32'},
+          {label:'CL in Top 20', val:diagnostics.clIn20,  lo:1,  hi:3,  ok:'1–3'},
+          {label:'CL in Top 50', val:diagnostics.clIn50,  lo:3,  hi:6,  ok:'3–6'},
+          {label:'RP in Top 50', val:diagnostics.rpIn50,  lo:5,  hi:10, ok:'5–10'},
+        ].map(r => {
+          const ok = r.val >= r.lo && r.val <= r.hi
+          const over = r.val > r.hi
+          const c = ok ? 'var(--green)' : over ? 'var(--blue2)' : 'var(--red)'
           return (
-            <div key={w.name} style={{display:'flex',justifyContent:'space-between',alignItems:'center',
-              padding:'2px 0',borderBottom:'1px solid var(--border)',
-              opacity:w.drafted&&!w.isKeeper?0.4:1,
-              background:inWindow?'rgba(251,191,36,0.04)':undefined}}>
-              <div style={{display:'flex',alignItems:'center',gap:4}}>
-                <span style={{fontSize:8}}>{stars}</span>
-                <span style={{color,fontSize:11,fontWeight:inWindow?700:400}}>{w.abbr}</span>
-                <span style={{color:'var(--text3)',fontSize:9}}>{w.pos}</span>
+            <div key={r.label} style={{display:'flex',justifyContent:'space-between',alignItems:'center',
+              padding:'4px 0',borderBottom:'1px solid var(--border)'}}>
+              <span style={{color:'var(--text2)'}}>{r.label}</span>
+              <div style={{display:'flex',alignItems:'center',gap:5}}>
+                <span style={{color:c,fontWeight:700}}>{r.val}</span>
+                <span style={{color:'var(--text3)',fontSize:10}}>/ {r.ok}</span>
+                <span style={{color:c,fontSize:10}}>{ok?'✓':over?'✗':'✗'}</span>
               </div>
-              <span style={{fontSize:10,color:w.drafted&&!w.isKeeper?'var(--text3)':color,fontWeight:inWindow?700:400}}>
-                {w.drafted && !w.isKeeper ? 'GONE' : `R${w.rdLo}${w.rdLo!==w.rdHi?`–${w.rdHi}`:''}`}
-              </span>
             </div>
           )
         })}
-      </SidebarSection>
+      </SB>
 
-      {/* My Keepers */}
-      <SidebarSection title="My Keepers">
-        {MY_KEEPERS.map(k => (
-          <div key={k.name} style={{display:'flex',justifyContent:'space-between',padding:'3px 0',borderBottom:'1px solid var(--border)'}}>
-            <span style={{color:'var(--text)',fontSize:11}}>{k.name}</span>
-            <span style={{color:'var(--yellow)',fontSize:10,fontWeight:700}}>R{k.round}</span>
+      <SB label="Weights">
+        {[
+          {label:'Hitter weight',      val:hitWeight,    min:30,  max:75,  step:1,   fn:setHitWeight,   disp:`${hitWeight}%`},
+          {label:'Pitcher compression',val:pitCompress,  min:0.60,max:1.10,step:0.05,fn:setPitCompress, disp:pitCompress.toFixed(2)},
+          {label:'Gap sensitivity',    val:gapSensitivity,min:0.5,max:2.0, step:0.1, fn:setGapSensitivity,disp:gapSensitivity.toFixed(1)},
+        ].map(s => (
+          <div key={s.label} style={{marginBottom:14}}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+              <span style={{color:'var(--text2)'}}>{s.label}</span>
+              <span style={{color:'var(--blue2)',fontWeight:700}}>{s.disp}</span>
+            </div>
+            <input type="range" min={s.min} max={s.max} step={s.step} value={s.val}
+              onChange={e => s.fn(s.step<1?parseFloat(e.target.value):parseInt(e.target.value))}
+              style={{width:'100%',accentColor:'var(--blue)',cursor:'pointer'}} />
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:'var(--text3)',marginTop:1}}>
+              <span>{s.min}</span><span>{s.max}</span>
+            </div>
           </div>
         ))}
-      </SidebarSection>
-
-      {/* Weights */}
-      <SidebarSection title="Weights" hint="Adjust scoring model. Defaults work well.">
-        <SliderRow label="Hitter weight" value={hitWeight} min={30} max={75} step={1}
-          display={`${hitWeight}%`} onChange={setHitWeight} />
-        <div style={{fontSize:10,color:'var(--text3)',marginBottom:8}}>Pitcher weight (auto): {100-hitWeight}%</div>
-        <SliderRow label="Pitcher compression" value={pitCompress} min={0.60} max={1.10} step={0.05}
-          display={pitCompress.toFixed(2)} onChange={setPitCompress}
-          hint="SP scale. CL ×0.68, SU/RP ×0.18" />
-        <SliderRow label="Gap sensitivity" value={gapSensitivity} min={0.5} max={2.0} step={0.1}
-          display={gapSensitivity.toFixed(1)} onChange={setGapSensitivity}
-          hint="How strongly gaps shift rankings" />
-        <button className="btn btn-ghost btn-sm" style={{width:'100%',marginTop:4,fontSize:10}}
+        <div style={{fontSize:10,color:'var(--text3)',marginBottom:6}}>Pitcher weight (auto): {100-hitWeight}%</div>
+        <div style={{fontSize:10,color:'var(--text3)',marginBottom:10}}>CL ×0.68 · SU/RP ×0.18 (waiver-stream)</div>
+        <button className="btn btn-ghost btn-sm" style={{width:'100%',fontSize:10}}
           onClick={() => { setHitWeight(50); setPitCompress(0.85); setGapSensitivity(1.0) }}>
           Reset to defaults
         </button>
-      </SidebarSection>
+      </SB>
 
-      {/* Pitcher Roles */}
-      <SidebarSection title="Pitcher Roles" hint="Stream hold specialists on waivers">
+      <SB label="Pitcher Roles">
         {[
-          {label:'Win Contributors',cur:roles.winContributors,target:7},
-          {label:'Closers (S)',      cur:roles.closers,        target:3},
-          {label:'Hold Spec (HD)',   cur:roles.holdSpec,       target:2},
+          {label:'Win Contributors', sub:'W≥5 or IP≥100', cur:roles.winContributors, target:7},
+          {label:'Closers (S)',      sub:'SV≥8',          cur:roles.closers,         target:3},
+          {label:'Hold Spec (HD)',   sub:'Stream on wire', cur:roles.holdSpec,        target:2},
         ].map(r => {
-          const color = r.cur>=r.target?'var(--green)':r.cur>=r.target-1?'var(--yellow)':'var(--red)'
+          const c = r.cur>=r.target?'var(--green)':r.cur>=r.target-1?'var(--yellow)':'var(--red)'
           return (
-            <div key={r.label} style={{display:'flex',justifyContent:'space-between',padding:'3px 0',borderBottom:'1px solid var(--border)'}}>
-              <span style={{color:'var(--text2)'}}>{r.label}</span>
-              <span style={{color,fontWeight:700}}>{r.cur}/{r.target}</span>
+            <div key={r.label} style={{display:'flex',justifyContent:'space-between',
+              alignItems:'center',padding:'5px 0',borderBottom:'1px solid var(--border)'}}>
+              <div>
+                <div style={{color:'var(--text2)',fontSize:12}}>{r.label}</div>
+                <div style={{color:'var(--text3)',fontSize:10}}>{r.sub}</div>
+              </div>
+              <span style={{color:c,fontWeight:700,fontSize:14}}>{r.cur}/{r.target}</span>
             </div>
           )
         })}
-      </SidebarSection>
+      </SB>
 
-      <div style={{padding:'8px 12px',fontSize:10,color:'var(--text3)',marginTop:'auto',borderTop:'1px solid var(--border)'}}>
-        z-score → H/P weights → gap weights → ADP penalty → tier detection
-      </div>
-    </div>
-  )
-}
+      <SB label="My Keepers">
+        {MY_KEEPERS.map(k => (
+          <div key={k.name} style={{display:'flex',justifyContent:'space-between',
+            padding:'4px 0',borderBottom:'1px solid var(--border)'}}>
+            <span style={{color:'var(--text)'}}>{k.name}</span>
+            <span style={{color:'var(--tier1)',fontWeight:700,fontSize:11}}>R{k.round}</span>
+          </div>
+        ))}
+      </SB>
 
-function SidebarSection({ title, hint, children }) {
-  return (
-    <div style={{borderBottom:'1px solid var(--border)'}}>
-      <div style={{padding:'7px 12px 2px',fontSize:10,fontWeight:700,letterSpacing:'0.1em',textTransform:'uppercase',color:'var(--text3)'}}>{title}</div>
-      {hint && <div style={{padding:'0 12px 3px',fontSize:9,color:'var(--text3)',fontStyle:'italic'}}>{hint}</div>}
-      <div style={{padding:'2px 12px 8px'}}>{children}</div>
-    </div>
-  )
-}
-
-function DiagRow({ label, val, lo, hi }) {
-  const ok = val>=lo && val<=hi
-  const color = ok ? 'var(--green)' : 'var(--yellow)'
-  return (
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'2px 0',borderBottom:'1px solid var(--border)'}}>
-      <span style={{color:'var(--text2)',fontSize:11}}>{label}</span>
-      <div style={{display:'flex',alignItems:'center',gap:5}}>
-        <span style={{color,fontWeight:700,fontSize:12}}>{val}</span>
-        <span style={{color:'var(--text3)',fontSize:10}}>/{hi}</span>
-        <span style={{color,fontSize:11}}>{ok?'✓':'~'}</span>
+      <div style={{fontSize:10,color:'var(--text3)',lineHeight:1.5,borderTop:'1px solid var(--border)',paddingTop:10}}>
+        z-score → H/P weights → gap weights → ADP penalty/boost → tier detection
       </div>
-    </div>
-  )
-}
-
-function SliderRow({ label, value, min, max, step, display, onChange, hint }) {
-  return (
-    <div style={{marginBottom:8}}>
-      <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
-        <span style={{color:'var(--text2)',fontSize:11}}>{label}</span>
-        <span style={{color:'var(--blue2)',fontWeight:700,fontSize:11}}>{display}</span>
-      </div>
-      <input type="range" min={min} max={max} step={step} value={value}
-        onChange={e => onChange(step<1?parseFloat(e.target.value):parseInt(e.target.value))}
-        style={{width:'100%',accentColor:'var(--blue)',cursor:'pointer'}} />
-      <div style={{display:'flex',justifyContent:'space-between',fontSize:9,color:'var(--text3)'}}>
-        <span>{min}</span><span>{max}</span>
-      </div>
-      {hint && <div style={{fontSize:10,color:'var(--text3)',marginTop:1}}>{hint}</div>}
     </div>
   )
 }
 
 // ── DRAFT BOARD ───────────────────────────────────────────────────────────────
-const POS_FILTERS = ['ALL','⭐','H','P','C','1B','2B','3B','SS','OF','SP','RP','CL']
-
 function DraftBoard({ players, fullRankMap, boardFilter, setBoardFilter, search, setSearch,
   showDrafted, setShowDrafted, showKept, setShowKept, boardLimit, setBoardLimit,
-  onDraftMe, onDraftOther, onUndraft, selectedPlayer, onSelectPlayer, nextPick, round }) {
+  onDraftMe, onDraftOther, onUndraft, selectedPlayer, onSelectPlayer, round }) {
+
+  // Watchlist availability for the pill bar
+  const watchlistAvail = useMemo(() => WATCHLIST.map(w => {
+    const p = players.find(sp =>
+      normName(sp.name).includes(normName(w.name).split(' ')[0]) &&
+      normName(sp.name).includes(normName(w.name).split(' ').slice(-1)[0].slice(0,4)))
+    return { ...w, player: p, drafted: p?.drafted ?? false, isKeeper: p?.isKeeper ?? false }
+  }), [players])
 
   const filtered = useMemo(() => {
     let p = [...players]
     if (!showKept)    p = p.filter(x => !x.isKeeper)
     if (!showDrafted) p = p.filter(x => !x.drafted || x.isKeeper)
-    if (boardFilter === '⭐') p = p.filter(x => x.isWatchlist)
-    else if (boardFilter === 'H') p = p.filter(x => x.type==='hitter')
-    else if (boardFilter === 'P') p = p.filter(x => x.type==='pitcher')
-    else if (boardFilter !== 'ALL') p = p.filter(x => x.pos===boardFilter)
-    if (search) { const q=search.toLowerCase(); p = p.filter(x => x.name.toLowerCase().includes(q)||x.team.toLowerCase().includes(q)) }
+    if (boardFilter === '⭐')          p = p.filter(x => x.isWatchlist)
+    else if (boardFilter === 'Hitters') p = p.filter(x => x.type==='hitter')
+    else if (boardFilter === 'Pitchers')p = p.filter(x => x.type==='pitcher')
+    else if (!['All','⭐'].includes(boardFilter)) p = p.filter(x => x.pos===boardFilter)
+    if (search) { const q=search.toLowerCase(); p=p.filter(x=>x.name.toLowerCase().includes(q)||x.team.toLowerCase().includes(q)) }
     p.sort((a,b) => {
       if (a.isKeeper!==b.isKeeper) return a.isKeeper?1:-1
       return (b.liveScore??-99)-(a.liveScore??-99)
@@ -715,127 +668,195 @@ function DraftBoard({ players, fullRankMap, boardFilter, setBoardFilter, search,
 
   return (
     <div style={{display:'flex',flexDirection:'column',height:'100%'}}>
-      {/* Legend bar */}
-      <div style={{padding:'3px 12px',background:'var(--bg)',borderBottom:'1px solid var(--border)',fontSize:10,color:'var(--text3)',display:'flex',gap:16,flexWrap:'wrap'}}>
-        <span><b style={{color:'var(--text2)'}}>Score</b> = z-score × gap weight</span>
-        <span><b style={{color:'var(--green)'}}>M</b> = mine &nbsp;·&nbsp; <b style={{color:'var(--text2)'}}>D</b> = other team</span>
-        <span><b style={{color:'var(--yellow)'}}>K·R#</b> = keeper round</span>
-        <span><b style={{color:'var(--blue2)'}}>⭐</b> = watchlist target</span>
-        <span>Edge = our rank vs CBS ADP</span>
+
+      {/* WATCHLIST PILL BAR — horizontal scroll, FOF-style */}
+      <div style={{background:'var(--bg2)',borderBottom:'1px solid var(--border2)',flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',gap:4,padding:'4px 8px 4px 10px'}}>
+          <span style={{fontSize:10,fontWeight:700,color:'var(--text3)',letterSpacing:'0.08em',
+            textTransform:'uppercase',whiteSpace:'nowrap',paddingRight:6,
+            borderRight:'1px solid var(--border2)',marginRight:2}}>🎯 Watchlist</span>
+          <div style={{display:'flex',gap:5,overflowX:'auto',padding:'2px 0',flex:1}}>
+            {watchlistAvail.filter(w => !w.isKeeper).map(w => {
+              const inWindow = !w.drafted && round >= w.rdLo - 1 && round <= w.rdHi + 1
+              const isNow    = !w.drafted && round >= w.rdLo && round <= w.rdHi
+              const stars    = w.stars >= 3 ? '★★★' : w.stars >= 2 ? '★★' : '★'
+              return (
+                <div key={w.name}
+                  className={`wl-pill ${isNow?'active':inWindow?'in-window':w.drafted?'gone':''}`}
+                  title={w.note}
+                  onClick={() => w.player && onSelectPlayer(w.player)}>
+                  <div style={{display:'flex',alignItems:'center',gap:3}}>
+                    <span style={{fontSize:8,color:isNow?'var(--tier1)':w.drafted?'var(--text3)':'var(--text3)'}}>{stars}</span>
+                    <span style={{fontSize:11,fontWeight:600,
+                      color:w.drafted?'var(--text3)':isNow?'var(--tier1)':inWindow?'var(--yellow)':'var(--text2)'}}>
+                      {w.abbr}
+                    </span>
+                  </div>
+                  <span style={{fontSize:9,color:'var(--text3)'}}>{w.pos}</span>
+                  <span style={{fontSize:9,fontWeight:600,
+                    color:w.drafted?'var(--text3)':isNow?'var(--tier1)':inWindow?'var(--yellow)':'var(--text3)'}}>
+                    {w.drafted ? 'gone' : `R${w.rdLo}${w.rdLo!==w.rdHi?`–${w.rdHi}`:''}`}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
       </div>
 
-      {/* Filter bar */}
-      <div style={{padding:'6px 12px',background:'var(--bg2)',borderBottom:'1px solid var(--border)',display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+      {/* FILTER BAR — FOF style: tabs + pos dropdown + hide drafted */}
+      <div className="filter-bar" style={{flexShrink:0}}>
         <input value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Search player or team…" style={{width:160}} />
-        <div style={{display:'flex',gap:2,flexWrap:'wrap'}}>
-          {POS_FILTERS.map(f => (
-            <button key={f}
-              className={`btn btn-sm ${boardFilter===f?'btn-primary':'btn-ghost'}`}
-              style={{minWidth:f==='⭐'?28:32,padding:'3px 5px',fontSize:f==='⭐'?13:11}}
-              onClick={() => setBoardFilter(f)}>{f}</button>
+          placeholder="Search player…" style={{width:150,fontSize:12}} />
+
+        {['All','Hitters','Pitchers','⭐'].map(f => (
+          <div key={f} className={`filter-tab ${boardFilter===f?'active':''}`}
+            onClick={() => setBoardFilter(f)}
+            style={{padding:'4px 12px',cursor:'pointer'}}>
+            {f==='⭐' ? '⭐ Watchlist' : f}
+          </div>
+        ))}
+
+        <select value={boardFilter} onChange={e => setBoardFilter(e.target.value)}
+          style={{fontSize:11,padding:'3px 6px',minWidth:56}}>
+          <option value="All">ALL</option>
+          {['C','1B','2B','3B','SS','OF','SP','RP','CL','SU'].map(p => (
+            <option key={p} value={p}>{p}</option>
           ))}
-        </div>
-        <div style={{marginLeft:'auto',display:'flex',gap:10,alignItems:'center',fontSize:11,color:'var(--text2)'}}>
-          <label style={{display:'flex',alignItems:'center',gap:4,cursor:'pointer'}}>
-            <input type="checkbox" checked={showKept} onChange={e=>setShowKept(e.target.checked)} /> Keepers
+        </select>
+
+        <div style={{marginLeft:'auto',display:'flex',gap:10,alignItems:'center'}}>
+          <label style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer',color:'var(--text2)',fontSize:12}}>
+            <input type="checkbox" checked={showDrafted} onChange={e=>setShowDrafted(e.target.checked)} />
+            Hide drafted
           </label>
-          <label style={{display:'flex',alignItems:'center',gap:4,cursor:'pointer'}}>
-            <input type="checkbox" checked={showDrafted} onChange={e=>setShowDrafted(e.target.checked)} /> Drafted
+          <label style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer',color:'var(--text2)',fontSize:12}}>
+            <input type="checkbox" checked={showKept} onChange={e=>setShowKept(e.target.checked)} />
+            Keepers
           </label>
-          <span style={{color:'var(--text3)'}}>{filtered.length} shown</span>
+          <span style={{color:'var(--text3)',fontSize:11}}>{filtered.length} / {players.length} shown</span>
         </div>
       </div>
 
+      {/* TABLE */}
       <div style={{flex:1,overflow:'auto'}}>
         <table>
           <thead>
             <tr>
-              <th style={{width:38}}>#</th>
-              <th style={{width:24}}>T</th>
+              <th style={{width:36}}># ↑</th>
+              <th style={{width:22}}></th>
               <th style={{minWidth:160}}>Player</th>
-              <th>Pos</th><th>Team</th>
-              <th>Score</th>
-              <th style={{width:36}}>Tier</th>
-              <th style={{width:50}}>CBS</th>
-              <th style={{width:46}}>Edge</th>
-              <th>R</th><th>H</th><th>HR</th><th>RBI</th><th>SB</th><th>OBP</th>
+              <th>Pos</th>
+              <th>Team</th>
+              <th style={{width:22}}>T</th>
+              <th>Score ↕</th>
+              <th style={{width:40}}>Tier</th>
+              <th style={{width:52}}>CBS ↕</th>
+              <th style={{width:50}}>Edge ↕</th>
+              <th>R</th><th>HR</th><th>RBI</th><th>SB</th><th>OBP</th>
               <th>W</th><th>S</th><th>HD</th><th>K</th><th>ERA</th><th>WHIP</th>
-              <th style={{width:68}}>M / D</th>
+              <th style={{width:70}}>M / D</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map(p => {
-              const isH   = p.type==='hitter'
-              const myRnk = fullRankMap.get(p.id)
-              const edge  = p.cbsADP && myRnk ? Math.round(myRnk - p.cbsADP) : null
-              const barW  = p.isKeeper ? 0 : Math.max(0,Math.min(100,(p.liveScore/topScore)*100))
-              const isSelected = selectedPlayer?.id === p.id
-              const wInfo = p.watchlistInfo
+              const isH    = p.type==='hitter'
+              const myRnk  = fullRankMap.get(p.id)
+              const edge   = p.cbsADP && myRnk ? Math.round(myRnk - p.cbsADP) : null
+              const barW   = p.isKeeper ? 0 : Math.max(0, Math.min(100, (p.liveScore/topScore)*100))
+              const isSel  = selectedPlayer?.id === p.id
+              const wInfo  = p.watchlistInfo
+
+              // Type badge
+              const typeBadge = isH
+                ? <span className="badge badge-bat">BAT</span>
+                : p.pos==='CL'
+                  ? <span className="badge badge-cl">CL</span>
+                  : <span className="badge badge-pit">PIT</span>
+
+              // Tier pill
+              const tierPill = p.tier
+                ? <span className={`tier-pill tier-T${p.tier}`}>T{p.tier}</span>
+                : null
 
               return (
                 <tr key={p.id}
                   onClick={() => onSelectPlayer(p)}
                   style={{
-                    ...(p.isKeeper?{opacity:0.42}:p.drafted?{opacity:0.35}:{}),
                     cursor:'pointer',
-                    background: isSelected ? 'rgba(59,130,246,0.1)' : undefined,
-                    outline: isSelected ? '1px solid var(--blue)' : 'none',
+                    opacity: p.isKeeper ? 0.45 : p.drafted && !p.isMine ? 0.38 : 1,
+                    outline: isSel ? '1px solid var(--blue)' : 'none',
+                    background: isSel ? 'rgba(56,139,253,0.1)' : undefined,
                   }}
                   className={`${p.isMine&&!p.isKeeper?'mine':''} ${p.tierBreak&&!p.isKeeper?'tier-break':''}`}
                 >
-                  <td style={{color:'var(--text3)',fontSize:11}}>
+                  {/* # rank */}
+                  <td style={{color:'var(--text3)',fontSize:11,textAlign:'right'}}>
                     {p.isKeeper
-                      ? <span style={{fontSize:9,color:'var(--yellow)',fontWeight:700}}>K·R{p.keeperInfo?.round}</span>
-                      : myRnk}
+                      ? <span className="badge badge-keep" style={{fontSize:9}}>K·R{p.keeperInfo?.round}</span>
+                      : myRnk ?? '—'}
                   </td>
 
-                  <td>
-                    <span style={{fontSize:10,fontWeight:700,
-                      color:isH?'var(--green)':p.pos==='CL'?'var(--purple)':'var(--blue2)'}}>
-                      {isH?'H':p.pos==='CL'?'CL':'P'}
-                    </span>
+                  {/* Watchlist star */}
+                  <td style={{padding:'5px 3px',textAlign:'center'}}>
+                    {wInfo && <span style={{fontSize:10,color:'var(--tier1)'}} title={wInfo.note}>★</span>}
                   </td>
 
+                  {/* Player name */}
                   <td>
-                    <div style={{display:'flex',alignItems:'center',gap:4}}>
-                      {wInfo && <span style={{fontSize:9,color:'var(--tier1)'}} title={wInfo.note}>{'⭐'.repeat(wInfo.stars)}</span>}
-                      <span style={{fontWeight:p.isMine?700:400}}>{p.name}</span>
-                      {p.isMyKeeper && <span style={{fontSize:9,color:'var(--yellow)',fontWeight:700,background:'rgba(251,191,36,0.12)',padding:'1px 4px',borderRadius:2}}>KEPT R{p.keeperInfo?.round}</span>}
-                      {p.isKeeper&&!p.isMyKeeper && <span style={{fontSize:9,color:'var(--text3)',background:'rgba(255,255,255,0.05)',padding:'1px 4px',borderRadius:2}}>KEPT</span>}
-                      {p.isMine&&!p.isKeeper && <span style={{fontSize:9,color:'var(--blue)',background:'rgba(59,130,246,0.12)',padding:'1px 4px',borderRadius:2}}>MINE</span>}
+                    <div style={{display:'flex',alignItems:'center',gap:5}}>
+                      <span style={{
+                        fontWeight: p.isMine ? 700 : 400,
+                        color: p.drafted&&!p.isMine ? 'var(--text3)' : 'var(--text)'
+                      }}>{p.name}</span>
+                      {p.isMyKeeper && <span className="badge badge-keep" style={{fontSize:8}}>KEPT R{p.keeperInfo?.round}</span>}
+                      {p.isMine&&!p.isKeeper && <span style={{fontSize:9,color:'var(--blue2)',background:'rgba(56,139,253,0.12)',padding:'1px 4px',borderRadius:3}}>mine</span>}
+                      {p.isKeeper&&!p.isMyKeeper && <span style={{fontSize:9,color:'var(--text3)',background:'rgba(255,255,255,0.05)',padding:'1px 4px',borderRadius:3}}>kept</span>}
                     </div>
                   </td>
 
+                  {/* Pos */}
                   <td><span style={{color:posColor(p.pos),fontWeight:600,fontSize:12}}>{p.pos}</span></td>
-                  <td style={{color:'var(--text3)'}}>{p.team}</td>
 
+                  {/* Team */}
+                  <td style={{color:'var(--text3)',fontSize:11}}>{p.team}</td>
+
+                  {/* Type badge */}
+                  <td style={{padding:'5px 4px'}}>{typeBadge}</td>
+
+                  {/* Score bar */}
                   <td>
                     {!p.isKeeper && (
-                      <div style={{display:'flex',alignItems:'center',gap:4}}>
-                        <div style={{width:40,height:4,background:'var(--bg3)',borderRadius:2}}>
-                          <div style={{height:'100%',borderRadius:2,background:tierColor(p.tier),width:`${barW}%`}} />
+                      <div style={{display:'flex',alignItems:'center',gap:5}}>
+                        <div style={{width:48,height:4,background:'var(--bg3)',borderRadius:2}}>
+                          <div style={{height:'100%',borderRadius:2,
+                            background:tierColor(p.tier),width:`${barW}%`}} />
                         </div>
-                        <span style={{fontSize:11,color:'var(--text2)',minWidth:26}}>{p.liveScore?.toFixed(1)}</span>
+                        <span style={{fontSize:11,color:'var(--text2)',minWidth:28}}>{p.liveScore?.toFixed(1)}</span>
                       </div>
                     )}
                   </td>
 
-                  <td>{!p.isKeeper && <span style={{color:tierColor(p.tier),fontSize:11,fontWeight:700}}>T{p.tier}</span>}</td>
+                  {/* Tier pill */}
+                  <td>{tierPill}</td>
 
+                  {/* CBS ADP */}
                   <td style={{color:'var(--text3)',fontSize:11}}>{p.cbsADP?p.cbsADP.toFixed(1):'—'}</td>
 
+                  {/* Edge */}
                   <td style={{fontSize:11,fontWeight:edge!=null&&Math.abs(edge)>5?700:400,
                     color:edge==null?'var(--text3)':edge>5?'var(--green)':edge<-5?'var(--red)':'var(--text3)'}}>
                     {edge!=null?(edge>0?`+${edge}`:edge):'—'}
                   </td>
 
+                  {/* Hitter stats */}
                   <td style={{color:isH?'var(--text)':'var(--text3)'}}>{isH?Math.round(p.R||0):'—'}</td>
-                  <td style={{color:isH?'var(--text)':'var(--text3)'}}>{isH?Math.round(p.H||0):'—'}</td>
                   <td style={{color:isH?'var(--text)':'var(--text3)'}}>{isH?Math.round(p.HR||0):'—'}</td>
                   <td style={{color:isH?'var(--text)':'var(--text3)'}}>{isH?Math.round(p.RBI||0):'—'}</td>
                   <td style={{color:isH?'var(--text)':'var(--text3)'}}>{isH?Math.round(p.SB||0):'—'}</td>
                   <td style={{color:isH?'var(--text)':'var(--text3)'}}>{isH?(p.OBP||0).toFixed(3):'—'}</td>
+
+                  {/* Pitcher stats */}
                   <td style={{color:!isH?'var(--text)'  :'var(--text3)'}}>{!isH?Math.round(p.W||0)  :'—'}</td>
                   <td style={{color:!isH?'var(--purple)':'var(--text3)'}}>{!isH?Math.round(p.SV||0) :'—'}</td>
                   <td style={{color:!isH?'var(--blue2)' :'var(--text3)'}}>{!isH?Math.round(p.HLD||0):'—'}</td>
@@ -843,18 +864,19 @@ function DraftBoard({ players, fullRankMap, boardFilter, setBoardFilter, search,
                   <td style={{color:!isH?'var(--text)'  :'var(--text3)'}}>{!isH?(p.ERA||0).toFixed(2) :'—'}</td>
                   <td style={{color:!isH?'var(--text)'  :'var(--text3)'}}>{!isH?(p.WHIP||0).toFixed(3):'—'}</td>
 
-                  <td onClick={e => e.stopPropagation()}>
+                  {/* M / D actions */}
+                  <td onClick={e => e.stopPropagation()} style={{padding:'3px 6px'}}>
                     {p.isKeeper ? (
-                      <span style={{fontSize:10,color:'var(--yellow)'}}>KEPT</span>
+                      <span style={{fontSize:10,color:'var(--tier1)',fontWeight:700}}>KEPT</span>
                     ) : p.drafted ? (
-                      <button className="btn btn-sm btn-ghost" style={{fontSize:10,padding:'2px 6px'}}
-                        onClick={() => onUndraft(p.id)}>Undo</button>
+                      <button className="btn btn-xs btn-ghost"
+                        onClick={() => onUndraft(p.id)}>↩</button>
                     ) : (
                       <div style={{display:'flex',gap:3}}>
-                        <button className="btn btn-sm btn-primary" style={{padding:'2px 8px'}}
+                        <button className="btn btn-xs btn-green"
                           onClick={() => onDraftMe(p)} title="Draft to my team">M</button>
-                        <button className="btn btn-sm btn-ghost" style={{padding:'2px 8px',color:'var(--text3)'}}
-                          onClick={() => onDraftOther(p)} title="Drafted by other team">D</button>
+                        <button className="btn btn-xs btn-ghost"
+                          onClick={() => onDraftOther(p)} title="Other team picked">D</button>
                       </div>
                     )}
                   </td>
@@ -863,9 +885,11 @@ function DraftBoard({ players, fullRankMap, boardFilter, setBoardFilter, search,
             })}
           </tbody>
         </table>
-        {boardLimit < players.length && (
+        {boardLimit < players.filter(p => !p.drafted||p.isKeeper).length && (
           <div style={{padding:12,textAlign:'center'}}>
-            <button className="btn btn-ghost btn-sm" onClick={() => setBoardLimit(b=>b+100)}>Show more</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setBoardLimit(b=>b+100)}>
+              Show more players
+            </button>
           </div>
         )}
       </div>
