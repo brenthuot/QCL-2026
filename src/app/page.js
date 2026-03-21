@@ -490,7 +490,7 @@ export default function App() {
             <CategoryDashboard myTotals={myTotals} targets={targets} gapWeights={gapWeights} />
           )}
           {tab==='rec' && (
-            <Recommendations recommendations={recommendations} round={round} roles={roles}
+            <Recommendations recommendations={recommendations} round={round} roles={roles} myPlayers={myPlayers}
               onDraftMe={p => markDrafted(p,true)} onSelectPlayer={setSelectedPlayer}
             />
           )}
@@ -1106,7 +1106,7 @@ function CategoryDashboard({ myTotals, targets, gapWeights }) {
 }
 
 // ── RECOMMENDATIONS ───────────────────────────────────────────────────────────
-function Recommendations({ recommendations, round, roles, onDraftMe, onSelectPlayer }) {
+function Recommendations({ recommendations, round, roles, myPlayers, onDraftMe, onSelectPlayer }) {
   return (
     <div style={{padding:12,overflow:'auto'}}>
       <div style={{marginBottom:12}}>
