@@ -197,25 +197,27 @@ export function buildRecommendations(
   const pitcherCount = myPlayers.filter(p => p.type === 'pitcher').length
   const spCount      = myPlayers.filter(p => p.pos === 'SP').length
   const clCount      = myPlayers.filter(p => p.pos === 'CL').length
+  const suCount      = myPlayers.filter(p => ['SU','RP'].includes(p.pos)).length
 
-  // Roster slot targets (24 total picks)
-  // 12 hitter starters + 3 UTIL = up to 15 hitters, but realistically 12-13
-  // 4 SP + 3 RP + 2 P = 9 pitchers
-  const HITTER_TARGET  = 13
-  const SP_MAX         = 6   // never exceed 6 SPs (4 starters + 2 P flex)
-  const CL_MAX         = 3   // 3 closers max
-  const PITCHER_MAX    = 9
+  const HITTER_TARGET = 13
+  const SP_MAX        = 6
+  const CL_MAX        = 3
+  const SU_MAX        = 2   // 2 hold specialists max, only after round 14
+  const PITCHER_MAX   = 9
 
-  // How many hitter/pitcher slots remain
-  const hitterSlotsLeft  = HITTER_TARGET - hitterCount
-  const pitcherSlotsLeft = PITCHER_MAX   - pitcherCount
-
-  // Rank from FULL pool for stable ADP edge calculation
   const poolForRank = fullPool ?? availablePlayers
   const sortedFull = [...poolForRank]
     .filter(p => !p.isKeeper)
     .sort((a, b) => (b.liveScore ?? -99) - (a.liveScore ?? -99))
   const rankMap = new Map(sortedFull.map((p, i) => [p.id, i + 1]))
+
+  // Category gap tracking for urgency
+  const projK  = myTotals.K  ?? myTotals.SO  ?? 0
+  const projSV = myTotals.S  ?? myTotals.SV  ?? 0
+  const kTarget  = targets.K?.third  ?? targets.SO?.third  ?? 1525
+  const svTarget = targets.S?.third  ?? targets.SV?.third  ?? 115
+  const kPct  = kTarget  > 0 ? projK  / kTarget  : 1
+  const svPct = svTarget > 0 ? projSV / svTarget : 1
 
   return availablePlayers
     .filter(p => !p.drafted)
@@ -225,45 +227,65 @@ export function buildRecommendations(
       let reasons = []
 
       // ── ROSTER BALANCE GUARDRAILS ─────────────────────────────────────────
-      // These are hard suppressions, not soft adjustments.
-      // They prevent the model from over-drafting pitchers at the expense of hitters.
 
-      // 1. SU/hold specialists: NEVER recommend before round 12
-      //    They are waiver-streamable; drafting one in round 6 loses you a hitter slot
-      if ((p.pos === 'SU' || p.pos === 'RP') && roundNum < 12) {
-        return null  // filtered out below
+      // SU/RP: only recommend after round 14, max 2 total
+      // (Hold specialists are waiver-streamable but we need 2 for HD category)
+      if ((p.pos === 'SU' || p.pos === 'RP')) {
+        if (roundNum < 14 || suCount >= SU_MAX) return null
       }
 
-      // 2. SP saturation: once you have SP_MAX starters, stop recommending SPs
-      if (p.pos === 'SP' && spCount >= SP_MAX) {
-        return null
-      }
+      // SP saturation
+      if (p.pos === 'SP' && spCount >= SP_MAX) return null
 
-      // 3. CL saturation: once you have CL_MAX closers, stop
-      if (p.pos === 'CL' && clCount >= CL_MAX) {
-        return null
-      }
+      // CL saturation
+      if (p.pos === 'CL' && clCount >= CL_MAX) return null
 
-      // 4. Pitcher slot full: no more pitchers
-      if (p.type === 'pitcher' && pitcherCount >= PITCHER_MAX) {
-        return null
-      }
+      // Pitcher slots full
+      if (p.type === 'pitcher' && pitcherCount >= PITCHER_MAX) return null
 
-      // 5. Hitter urgency: if significantly behind on hitter count vs round,
-      //    suppress all pitchers to force hitter picks
+      // Hitter balance: suppress pitchers when behind on hitter pace
       const expectedHitters = Math.round(roundNum * (HITTER_TARGET / 24))
       const hitterDeficit = expectedHitters - hitterCount
+      if (hitterDeficit >= 3 && p.type === 'pitcher') return null
       if (hitterDeficit >= 2 && p.type === 'pitcher') {
-        // Behind on hitters — suppress pitchers heavily
-        if (hitterDeficit >= 3) return null  // critically behind, block all pitchers
-        urgencyBoost -= 3.0  // 2 behind — strongly penalize pitchers
-        reasons.push(`⚠ Behind on hitters (${hitterCount}/${expectedHitters} expected)`)
+        urgencyBoost -= 3.0
+        reasons.push(`⚠ Behind on hitters (${hitterCount}/${expectedHitters} expected by R${roundNum})`)
       }
-
-      // 6. Hitter boost: if behind on hitters, give hitters urgency
       if (hitterDeficit >= 2 && p.type === 'hitter') {
         urgencyBoost += hitterDeficit * 1.5
-        reasons.push(`Filling hitter gap (${hitterCount}/${expectedHitters} expected by R${roundNum})`)
+        reasons.push(`Filling hitter gap — ${hitterCount}/${expectedHitters} expected by R${roundNum}`)
+      }
+
+      // ── STRIKEOUT URGENCY ─────────────────────────────────────────────────
+      // K is the hardest pitching category to accumulate — needs high-K SPs
+      // Give explicit boost to high-K starters when K gap is large
+      if (p.pos === 'SP' && spCount < SP_MAX && kPct < 0.80) {
+        const zK = p.z_K ?? 0
+        if (zK > 0.5) {
+          const kUrgency = zK * 0.6 * (1 - kPct)  // scales with both K quality and gap
+          urgencyBoost += kUrgency
+          reasons.push(`K gap ${Math.round((1-kPct)*100)}% — high strikeout arm`)
+        }
+      }
+
+      // ── SAVE URGENCY ──────────────────────────────────────────────────────
+      // Prefer high-SV closers when save gap is large
+      if (p.pos === 'CL' && clCount < CL_MAX) {
+        const svUrgency = roundNum >= 7 ? 1.5 + (svPct < 0.7 ? 0.5 : 0) : 0
+        urgencyBoost += svUrgency
+        if (svUrgency > 0) {
+          const zS = p.z_S ?? 0
+          const eliteBonus = zS > 1.0 ? 0.5 : 0  // bonus for elite save projections
+          urgencyBoost += eliteBonus
+          reasons.push(`Need closers (${clCount}/${CL_MAX}) — ${Math.round((1-svPct)*100)}% SV gap`)
+        }
+      }
+
+      // SP win urgency (scales down as you accumulate SPs)
+      if (p.pos === 'SP' && roles.winContributors < 7 && spCount < SP_MAX) {
+        const spUrgency = Math.max(0, 0.8 - (spCount - 2) * 0.3)
+        urgencyBoost += spUrgency
+        if (spUrgency > 0) reasons.push(`Need win contributors (${roles.winContributors}/7)`)
       }
 
       // ── ADP VALUE BOOST / PENALTY ─────────────────────────────────────────
@@ -283,24 +305,8 @@ export function buildRecommendations(
         if (adpBoostPct > 0) {
           reasons.push(`Value pick — our rank #${myRank} vs CBS ADP ${p.cbsADP.toFixed(1)} (+${Math.round(edge)})`)
         } else if (adpBoostPct < 0) {
-          reasons.push(`⚠ CBS ranks later (ADP ${p.cbsADP.toFixed(1)}) vs our #${myRank} (${Math.round(edge)})`)
+          reasons.push(`⚠ CBS ranks later (ADP ${p.cbsADP.toFixed(1)}) vs our #${myRank}`)
         }
-      }
-
-      // ── PITCHER ROLE URGENCY ──────────────────────────────────────────────
-      if (p.type === 'pitcher') {
-        if (p.pos === 'CL' && clCount < CL_MAX) {
-          const saveUrgency = roundNum >= 7 ? 1.5 : 0
-          urgencyBoost += saveUrgency
-          if (saveUrgency > 0) reasons.push(`Need closers (${clCount}/${CL_MAX}) — S gap`)
-        }
-        if (p.pos === 'SP' && roles.winContributors < 7 && spCount < SP_MAX) {
-          // SP urgency scales DOWN as you accumulate SPs
-          const spUrgency = Math.max(0, 0.8 - (spCount - 2) * 0.3)
-          urgencyBoost += spUrgency
-          if (spUrgency > 0) reasons.push(`Need win contributors (${roles.winContributors}/7)`)
-        }
-        // SU/RP: no urgency ever
       }
 
       // ── CATEGORY NEED REASONS ─────────────────────────────────────────────
@@ -336,7 +342,7 @@ export function buildRecommendations(
         reasons:      reasons.slice(0, 3),
       }
     })
-    .filter(Boolean)  // remove nulls from hard suppressions
+    .filter(Boolean)
     .sort((a, b) => b.liveScore - a.liveScore)
 }
 
