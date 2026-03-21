@@ -151,7 +151,7 @@ export default function App() {
   // Sidebar
   const [sidebarOpen,    setSidebarOpen]    = useState(true)
   const [hitWeight,      setHitWeight]      = useState(50)
-  const [pitCompress,    setPitCompress]    = useState(0.85)
+  const [pitCompress,    setPitCompress]    = useState(0.92)
   const [gapSensitivity, setGapSensitivity] = useState(1.0)
 
   // Draft state
@@ -307,6 +307,8 @@ export default function App() {
   const diagnostics = useMemo(() => {
     const avail  = scoredPlayers.filter(p => !p.drafted && !p.isKeeper)
     const sorted = [...avail].sort((a,b) => b.liveScore-a.liveScore)
+    const projK  = myPlayers.filter(p=>p.type==='pitcher').reduce((s,p)=>s+(p.SO??0),0)
+    const projSV = myPlayers.filter(p=>p.pos==='CL').reduce((s,p)=>s+(p.SV??0),0)
     return {
       spIn20:  sorted.slice(0,20).filter(p=>p.pos==='SP').length,
       spIn50:  sorted.slice(0,50).filter(p=>p.pos==='SP').length,
@@ -314,8 +316,9 @@ export default function App() {
       clIn20:  sorted.slice(0,20).filter(p=>p.pos==='CL').length,
       clIn50:  sorted.slice(0,50).filter(p=>p.pos==='CL').length,
       rpIn50:  sorted.slice(0,50).filter(p=>['CL','SU','RP'].includes(p.pos)).length,
+      projK, projSV,
     }
-  }, [scoredPlayers])
+  }, [scoredPlayers, myPlayers])
 
   // Next pick info
   const myPickSlots = useMemo(() => getMyPickSlots(), [])
@@ -585,10 +588,9 @@ function Sidebar({ diagnostics, hitWeight, setHitWeight, pitCompress, setPitComp
         {[
           {label:'SP in Top 20',  val:diagnostics.spIn20,  lo:3,  hi:5,  ok:'4–5'},
           {label:'SP in Top 50',  val:diagnostics.spIn50,  lo:10, hi:16, ok:'12–16'},
-          {label:'SP in Top 100', val:diagnostics.spIn100, lo:22, hi:30, ok:'25–30'},
-          {label:'CL in Top 20',  val:diagnostics.clIn20,  lo:0,  hi:2,  ok:'0–2'},
           {label:'CL in Top 50',  val:diagnostics.clIn50,  lo:2,  hi:5,  ok:'2–5'},
-          {label:'RP in Top 50',  val:diagnostics.rpIn50,  lo:2,  hi:5,  ok:'2–5'},
+          {label:'Proj K',         val:diagnostics.projK,   lo:1100,hi:1525,ok:'1100+'},
+          {label:'Proj SV',        val:diagnostics.projSV,  lo:95,  hi:115, ok:'95+'},
         ].map(r => {
           const ok = r.val >= r.lo && r.val <= r.hi
           const over = r.val > r.hi
@@ -610,7 +612,7 @@ function Sidebar({ diagnostics, hitWeight, setHitWeight, pitCompress, setPitComp
       <SB label="Weights">
         {[
           {label:'Hitter weight',      val:hitWeight,    min:30,  max:75,  step:1,   fn:setHitWeight,   disp:`${hitWeight}%`},
-          {label:'Pitcher compression',val:pitCompress,  min:0.60,max:1.10,step:0.05,fn:setPitCompress, disp:pitCompress.toFixed(2)},
+          {label:'Pitcher compression',val:pitCompress,  min:0.70,max:1.10,step:0.05,fn:setPitCompress, disp:pitCompress.toFixed(2)},
           {label:'Gap sensitivity',    val:gapSensitivity,min:0.5,max:2.0, step:0.1, fn:setGapSensitivity,disp:gapSensitivity.toFixed(1)},
         ].map(s => (
           <div key={s.label} style={{marginBottom:14}}>
@@ -629,7 +631,7 @@ function Sidebar({ diagnostics, hitWeight, setHitWeight, pitCompress, setPitComp
         <div style={{fontSize:10,color:'var(--text3)',marginBottom:6}}>Pitcher weight (auto): {100-hitWeight}%</div>
         <div style={{fontSize:10,color:'var(--text3)',marginBottom:10}}>CL ×0.68 · SU/RP ×0.18 (waiver-stream)</div>
         <button className="btn btn-ghost btn-sm" style={{width:'100%',fontSize:10}}
-          onClick={() => { setHitWeight(50); setPitCompress(0.85); setGapSensitivity(1.0) }}>
+          onClick={() => { setHitWeight(50); setPitCompress(0.92); setGapSensitivity(1.0) }}>
           Reset to defaults
         </button>
       </SB>
@@ -1147,6 +1149,12 @@ function Recommendations({ recommendations, round, roles, myPlayers, onDraftMe, 
               color:clCount<=3?'var(--green)':'var(--red)',
               border:`1px solid ${clCount<=3?'rgba(63,185,80,0.3)':'rgba(248,81,73,0.3)'}`}}>
               CLs {clCount}/3 max
+            </span>
+            <span style={{padding:'3px 8px',borderRadius:4,fontWeight:600,
+              background:spCount<=6?'rgba(63,185,80,0.1)':'rgba(248,81,73,0.1)',
+              color:spCount<=6?'var(--green)':'var(--red)',
+              border:`1px solid ${spCount<=6?'rgba(63,185,80,0.3)':'rgba(248,81,73,0.3)'}`}}>
+              SPs {spCount}/6 max
             </span>
             {deficit >= 2 && (
               <span style={{padding:'3px 8px',borderRadius:4,fontWeight:700,
