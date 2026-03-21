@@ -80,7 +80,10 @@ export function computeLiveScore(player, gapWeights) {
     total += contribution
   }
 
-  return { liveScore: round3(total), liveBreakdown: breakdown }
+  // Floor at -3 so slightly-below-replacement players don't rank 400th.
+  // Players outside the draftable pool naturally fall below -3 and stay low.
+  const floored = Math.max(total, -3)
+  return { liveScore: round3(floored), liveBreakdown: breakdown }
 }
 
 // ── TIER DETECTION ────────────────────────────────────────────────────────────
@@ -190,11 +193,24 @@ export function buildRecommendations(
   fullPool
 ) {
   const roles = rosterRoles(myPlayers)
-  const hitterCount = myPlayers.filter(p => p.type === 'hitter').length
+  const hitterCount  = myPlayers.filter(p => p.type === 'hitter').length
   const pitcherCount = myPlayers.filter(p => p.type === 'pitcher').length
+  const spCount      = myPlayers.filter(p => p.pos === 'SP').length
+  const clCount      = myPlayers.filter(p => p.pos === 'CL').length
 
-  // Rank from FULL pool (all players including drafted + keepers) so rank
-  // stays stable all draft — a player ranked #30 in round 1 stays #30 in round 20
+  // Roster slot targets (24 total picks)
+  // 12 hitter starters + 3 UTIL = up to 15 hitters, but realistically 12-13
+  // 4 SP + 3 RP + 2 P = 9 pitchers
+  const HITTER_TARGET  = 13
+  const SP_MAX         = 6   // never exceed 6 SPs (4 starters + 2 P flex)
+  const CL_MAX         = 3   // 3 closers max
+  const PITCHER_MAX    = 9
+
+  // How many hitter/pitcher slots remain
+  const hitterSlotsLeft  = HITTER_TARGET - hitterCount
+  const pitcherSlotsLeft = PITCHER_MAX   - pitcherCount
+
+  // Rank from FULL pool for stable ADP edge calculation
   const poolForRank = fullPool ?? availablePlayers
   const sortedFull = [...poolForRank]
     .filter(p => !p.isKeeper)
@@ -208,53 +224,90 @@ export function buildRecommendations(
       let urgencyBoost = 0
       let reasons = []
 
-      // ── ADP VALUE BOOST / PENALTY ────────────────────────────────────────
-      // Boost when our rank beats CBS ADP (value pick — tiebreaker only).
-      // Penalty when CBS ADP is much later than our rank (market red flag).
-      // Capped at ±15% so category logic always dominates.
+      // ── ROSTER BALANCE GUARDRAILS ─────────────────────────────────────────
+      // These are hard suppressions, not soft adjustments.
+      // They prevent the model from over-drafting pitchers at the expense of hitters.
+
+      // 1. SU/hold specialists: NEVER recommend before round 12
+      //    They are waiver-streamable; drafting one in round 6 loses you a hitter slot
+      if ((p.pos === 'SU' || p.pos === 'RP') && roundNum < 12) {
+        return null  // filtered out below
+      }
+
+      // 2. SP saturation: once you have SP_MAX starters, stop recommending SPs
+      if (p.pos === 'SP' && spCount >= SP_MAX) {
+        return null
+      }
+
+      // 3. CL saturation: once you have CL_MAX closers, stop
+      if (p.pos === 'CL' && clCount >= CL_MAX) {
+        return null
+      }
+
+      // 4. Pitcher slot full: no more pitchers
+      if (p.type === 'pitcher' && pitcherCount >= PITCHER_MAX) {
+        return null
+      }
+
+      // 5. Hitter urgency: if significantly behind on hitter count vs round,
+      //    suppress all pitchers to force hitter picks
+      const expectedHitters = Math.round(roundNum * (HITTER_TARGET / 24))
+      const hitterDeficit = expectedHitters - hitterCount
+      if (hitterDeficit >= 2 && p.type === 'pitcher') {
+        // Behind on hitters — suppress pitchers heavily
+        if (hitterDeficit >= 3) return null  // critically behind, block all pitchers
+        urgencyBoost -= 3.0  // 2 behind — strongly penalize pitchers
+        reasons.push(`⚠ Behind on hitters (${hitterCount}/${expectedHitters} expected)`)
+      }
+
+      // 6. Hitter boost: if behind on hitters, give hitters urgency
+      if (hitterDeficit >= 2 && p.type === 'hitter') {
+        urgencyBoost += hitterDeficit * 1.5
+        reasons.push(`Filling hitter gap (${hitterCount}/${expectedHitters} expected by R${roundNum})`)
+      }
+
+      // ── ADP VALUE BOOST / PENALTY ─────────────────────────────────────────
       let adpBoostPct = 0
       if (liveScore > 0 && p.cbsADP) {
         const myRank = rankMap.get(p.id) ?? 999
-        const edge   = myRank - p.cbsADP  // positive = we rank higher (value)
-                                           // negative = market ranks much later (red flag)
-        if (edge > 20)        adpBoostPct =  0.15   // strong value
-        else if (edge > 10)   adpBoostPct =  0.08   // mild value
-        else if (edge > 5)    adpBoostPct =  0.03   // tiebreaker
-        else if (edge < -120) adpBoostPct = -0.50   // severe divergence (Gallen tier)
-        else if (edge < -80)  adpBoostPct = -0.35   // major red flag
-        else if (edge < -50)  adpBoostPct = -0.22   // significant divergence
-        else if (edge < -30)  adpBoostPct = -0.12   // notable divergence
-        else if (edge < -15)  adpBoostPct = -0.06   // mild caution
+        const edge   = myRank - p.cbsADP
+        if      (edge > 20)   adpBoostPct =  0.15
+        else if (edge > 10)   adpBoostPct =  0.08
+        else if (edge > 5)    adpBoostPct =  0.03
+        else if (edge < -120) adpBoostPct = -0.50
+        else if (edge < -80)  adpBoostPct = -0.35
+        else if (edge < -50)  adpBoostPct = -0.22
+        else if (edge < -30)  adpBoostPct = -0.12
+        else if (edge < -15)  adpBoostPct = -0.06
 
         if (adpBoostPct > 0) {
-          reasons.push(`Value pick — our overall rank #${myRank} vs CBS ADP ${p.cbsADP.toFixed(1)} (+${Math.round(edge)})`)
+          reasons.push(`Value pick — our rank #${myRank} vs CBS ADP ${p.cbsADP.toFixed(1)} (+${Math.round(edge)})`)
         } else if (adpBoostPct < 0) {
-          reasons.push(`⚠ CBS ranks later (ADP ${p.cbsADP.toFixed(1)}) than our overall #${myRank} (${Math.round(edge)})`)
+          reasons.push(`⚠ CBS ranks later (ADP ${p.cbsADP.toFixed(1)}) vs our #${myRank} (${Math.round(edge)})`)
         }
       }
 
-      // Pitcher role urgency
-      // HD/SU deliberately excluded — hold specialists are waiver-streamable
+      // ── PITCHER ROLE URGENCY ──────────────────────────────────────────────
       if (p.type === 'pitcher') {
-        if (p.pos === 'CL' && roles.closers < 3) {
-          // Only boost closers from round 7+ — gap weights already handle earlier rounds
+        if (p.pos === 'CL' && clCount < CL_MAX) {
           const saveUrgency = roundNum >= 7 ? 1.5 : 0
           urgencyBoost += saveUrgency
-          if (saveUrgency > 0) reasons.push(`Need closers (${roles.closers}/3) — S gap`)
+          if (saveUrgency > 0) reasons.push(`Need closers (${clCount}/${CL_MAX}) — S gap`)
         }
-        if (p.pos === 'SP' && roles.winContributors < 7) {
-          urgencyBoost += 0.8
-          reasons.push(`Need win contributors (${roles.winContributors}/7) — W gap`)
+        if (p.pos === 'SP' && roles.winContributors < 7 && spCount < SP_MAX) {
+          // SP urgency scales DOWN as you accumulate SPs
+          const spUrgency = Math.max(0, 0.8 - (spCount - 2) * 0.3)
+          urgencyBoost += spUrgency
+          if (spUrgency > 0) reasons.push(`Need win contributors (${roles.winContributors}/7)`)
         }
-        // SU/RP: no urgency boost — stream these on waivers
+        // SU/RP: no urgency ever
       }
 
-      // Category need reasons
+      // ── CATEGORY NEED REASONS ─────────────────────────────────────────────
       const cats = PLAYER_CATS[p.type] ?? []
       for (const cat of cats) {
         const w = gapWeights[cat] ?? 1
-        const zKey = `z_${cat}`
-        const z = p[zKey] ?? 0
+        const z = p[`z_${cat}`] ?? 0
         if (w >= 1.5 && z >= 1.0) {
           const target = targets[cat]?.third
           const cur = myTotals[cat] ?? 0
@@ -263,15 +316,15 @@ export function buildRecommendations(
             const gapPct = target ? Math.round((1 - cur / target) * 100) : 0
             if (gapPct > 10) reasons.push(`${cat} gap ${gapPct}% — strong contributor`)
           } else {
-            reasons.push(`Helps ${cat} (currently ${isNeg && cur > 0 ? cur.toFixed(2) : 'unset'} vs target ${target})`)
+            reasons.push(`Helps ${cat} (${cur > 0 ? cur.toFixed(2) : 'unset'} vs target ${target})`)
           }
         }
       }
 
       if (reasons.length === 0) reasons.push('Balanced contributor across categories')
 
-      const adpBoost    = round2(liveScore * adpBoostPct)
-      const finalScore  = liveScore + urgencyBoost + adpBoost
+      const adpBoost   = round2(liveScore * adpBoostPct)
+      const finalScore = liveScore + urgencyBoost + adpBoost
 
       return {
         ...p,
@@ -283,6 +336,7 @@ export function buildRecommendations(
         reasons:      reasons.slice(0, 3),
       }
     })
+    .filter(Boolean)  // remove nulls from hard suppressions
     .sort((a, b) => b.liveScore - a.liveScore)
 }
 
