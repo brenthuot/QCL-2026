@@ -1120,11 +1120,46 @@ function Recommendations({ recommendations, round, roles, onDraftMe, onSelectPla
           <span><b style={{color:'var(--green)'}}>+% value</b> = our rank beats CBS ADP.</span>
         </div>
       </div>
+      {/* Roster balance status */}
+      {(() => {
+        const hitterCount  = myPlayers.filter(p => p.type==='hitter').length
+        const pitcherCount = myPlayers.filter(p => p.type==='pitcher').length
+        const spCount      = myPlayers.filter(p => p.pos==='SP').length
+        const clCount      = myPlayers.filter(p => p.pos==='CL').length
+        const expectedH    = Math.round(round * (13/24))
+        const deficit      = expectedH - hitterCount
+        return (
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10,fontSize:11}}>
+            <span style={{padding:'3px 8px',borderRadius:4,fontWeight:600,
+              background:hitterCount>=10?'rgba(63,185,80,0.1)':'rgba(248,81,73,0.1)',
+              color:hitterCount>=10?'var(--green)':'var(--red)',
+              border:`1px solid ${hitterCount>=10?'rgba(63,185,80,0.3)':'rgba(248,81,73,0.3)'}`}}>
+              Hitters {hitterCount}/13
+            </span>
+            <span style={{padding:'3px 8px',borderRadius:4,fontWeight:600,
+              background:spCount<=6?'rgba(63,185,80,0.1)':'rgba(248,81,73,0.1)',
+              color:spCount<=6?'var(--green)':'var(--red)',
+              border:`1px solid ${spCount<=6?'rgba(63,185,80,0.3)':'rgba(248,81,73,0.3)'}`}}>
+              SPs {spCount}/6 max
+            </span>
+            <span style={{padding:'3px 8px',borderRadius:4,fontWeight:600,
+              background:clCount<=3?'rgba(63,185,80,0.1)':'rgba(248,81,73,0.1)',
+              color:clCount<=3?'var(--green)':'var(--red)',
+              border:`1px solid ${clCount<=3?'rgba(63,185,80,0.3)':'rgba(248,81,73,0.3)'}`}}>
+              CLs {clCount}/3 max
+            </span>
+            {deficit >= 2 && (
+              <span style={{padding:'3px 8px',borderRadius:4,fontWeight:700,
+                background:'rgba(248,81,73,0.15)',color:'var(--red)',
+                border:'1px solid rgba(248,81,73,0.35)'}}>
+                ⚠ Behind on hitters — pitchers suppressed
+              </span>
+            )}
+          </div>
+        )
+      })()}
       {roles.closers < 3 && round > 6 && (
-        <div className="alert alert-warn" style={{marginBottom:8}}>⚠ Only {roles.closers}/3 closers drafted — Saves are scarce past round 9.</div>
-      )}
-      {roles.winContributors < 4 && round > 8 && (
-        <div className="alert alert-warn" style={{marginBottom:8}}>⚠ Only {roles.winContributors}/7 win contributors — Wins (W) category at risk.</div>
+        <div className="alert alert-warn" style={{marginBottom:8}}>⚠ Only {roles.closers}/3 closers — Saves gap growing. Target a CL this round.</div>
       )}
       <div style={{display:'flex',flexDirection:'column',gap:8}}>
         {recommendations.map((p,i) => (
