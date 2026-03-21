@@ -164,6 +164,9 @@ export default function App() {
   // Selected player panel
   const [selectedPlayer, setSelectedPlayer] = useState(null)
 
+  // Pick offset — manual adjustment if counter drifts
+  const [pickOffset, setPickOffset] = useState(0)
+
   // Modals
   const [showImport, setShowImport] = useState(false)
   const [importText, setImportText] = useState('')
@@ -235,15 +238,41 @@ export default function App() {
     return m
   }, [allPlayers])
 
+  // Pre-compute z-rank for ADP penalty (sorted by raw zTotal, ignoring gap weights)
+  const zRankMap = useMemo(() => {
+    const sorted = [...allPlayers]
+      .filter(p => !keeperIds.has(p.id))
+      .sort((a, b) => (b.zTotal ?? -99) - (a.zTotal ?? -99))
+    return new Map(sorted.map((p, i) => [p.id, i + 1]))
+  }, [allPlayers, keeperIds])
+
   // Score all players
   const scoredPlayers = useMemo(() => {
     const pitW = (100 - hitWeight) / 100
     const hitW = hitWeight / 100
     const all = allPlayers.map(p => {
       const { liveScore, liveBreakdown } = computeLiveScore(p, gapWeights)
-      const rpDampener = p.pos==='CL' ? 0.68 : p.pos==='SU' ? 0.18 : p.pos==='RP' ? 0.18 : 1.0
+      // CL: ~1.0 so top closers rank ~35-50 (mock R4-9); SU/RP: suppressed (stream on waivers)
+      const rpDampener = p.pos==='CL' ? 1.02 : p.pos==='SU' ? 0.18 : p.pos==='RP' ? 0.18 : 1.0
       const typeScale  = p.type==='hitter' ? hitW*2 : pitW*2*(p.pos==='SP' ? pitCompress : pitCompress*rpDampener)
       const kInfo = watchlistByPlayerId[p.id]
+      // ADP penalty/boost: compare our z-rank to CBS ADP
+      // edge negative = we rank player EARLIER than CBS → potential reach penalty
+      // edge positive = we rank player LATER → value pick boost
+      let adpMult = 1.0
+      if (liveScore > 0 && p.cbsADP) {
+        const zRnk = zRankMap.get(p.id) ?? 200
+        const edge = zRnk - p.cbsADP  // negative = we rank earlier = red flag
+        if      (edge < -120) adpMult = 0.50
+        else if (edge < -80)  adpMult = 0.65
+        else if (edge < -50)  adpMult = 0.78
+        else if (edge < -30)  adpMult = 0.88
+        else if (edge < -15)  adpMult = 0.94
+        else if (edge > 20)   adpMult = 1.15
+        else if (edge > 10)   adpMult = 1.08
+        else if (edge > 5)    adpMult = 1.03
+      }
+
       return {
         ...p,
         drafted:    draftedIds.has(p.id),
@@ -253,12 +282,12 @@ export default function App() {
         isWatchlist: !!watchlistByPlayerId[p.id],
         watchlistInfo: watchlistByPlayerId[p.id] ?? null,
         keeperInfo: KEEPERS.find(k => matchKeeperToPlayer(k.name, [p])?.id === p.id) ?? null,
-        liveScore:  liveScore * typeScale,
+        liveScore:  liveScore * typeScale * adpMult,
         liveBreakdown,
       }
     })
     return assignTiers(all, 'liveScore')
-  }, [allPlayers, draftedIds, keeperIds, myPlayerIds, myKeeperIds, gapWeights, hitWeight, pitCompress, watchlistByPlayerId])
+  }, [allPlayers, draftedIds, keeperIds, myPlayerIds, myKeeperIds, gapWeights, hitWeight, pitCompress, watchlistByPlayerId, zRankMap])
 
   // Full-pool stable rank map
   const fullRankMap = useMemo(() => {
@@ -292,16 +321,15 @@ export default function App() {
   const myPickSlots = useMemo(() => getMyPickSlots(), [])
   const nonKeeperDrafted = useMemo(() => [...draftedIds].filter(id => !keeperIds.has(id)).length, [draftedIds, keeperIds])
   const nextPick = useMemo(() => {
-    const draftedCount = nonKeeperDrafted + keeperIds.size
-    const currentOverall = draftedCount + 1
-    // Find which of my slots is next undrafted
+    // Use only non-keeper drafted picks for overall position
+    // Keepers slot into their specific rounds, not overall picks 1-N
+    const currentOverall = nonKeeperDrafted + 1 + pickOffset
     const mySlot = myPickSlots.find(s => {
-      const k14 = s.round === 14, k19 = s.round === 19
-      if (k14 || k19) return false
+      if (s.round === 14 || s.round === 19) return false  // keeper slots
       return s.overall >= currentOverall
     })
     return mySlot
-  }, [myPickSlots, nonKeeperDrafted, keeperIds])
+  }, [myPickSlots, nonKeeperDrafted, pickOffset])
 
   // Actions
   const markDrafted = useCallback((player, isMine) => {
@@ -397,6 +425,14 @@ export default function App() {
           <span style={{fontSize:11,color:'var(--text3)'}}>
             <b style={{color:'var(--blue2)'}}>{myPlayers.length}</b> my picks
           </span>
+          {/* Pick offset widget */}
+          <div style={{display:'flex',alignItems:'center',gap:4,background:'var(--bg3)',border:'1px solid var(--border2)',borderRadius:6,padding:'3px 8px'}}>
+            <span style={{fontSize:10,color:'var(--text3)',whiteSpace:'nowrap'}}>Pick adj</span>
+            <button onClick={() => setPickOffset(o => o - 1)} style={{background:'none',border:'none',color:'var(--text2)',cursor:'pointer',fontSize:14,padding:'0 3px',lineHeight:1}}>−</button>
+            <span style={{fontSize:12,fontWeight:700,color:pickOffset!==0?'var(--yellow)':'var(--text2)',minWidth:20,textAlign:'center'}}>{pickOffset > 0 ? `+${pickOffset}` : pickOffset}</span>
+            <button onClick={() => setPickOffset(o => o + 1)} style={{background:'none',border:'none',color:'var(--text2)',cursor:'pointer',fontSize:14,padding:'0 3px',lineHeight:1}}>+</button>
+            {pickOffset !== 0 && <button onClick={() => setPickOffset(0)} style={{background:'none',border:'none',color:'var(--text3)',cursor:'pointer',fontSize:10}}>✕</button>}
+          </div>
           <button className="btn btn-primary btn-sm" onClick={() => setShowImport(true)}>📥 Import Round</button>
           <button className="btn btn-ghost btn-sm" onClick={() => setShowReset(true)}>↺ Reset Draft</button>
         </div>
@@ -547,12 +583,12 @@ function Sidebar({ diagnostics, hitWeight, setHitWeight, pitCompress, setPitComp
         {/* Diagnostics */}
         <div style={{fontSize:10,fontWeight:600,color:'var(--text3)',letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:6}}>Live Diagnostics</div>
         {[
-          {label:'P in Top 20',  val:diagnostics.spIn20,  lo:3,  hi:5,  ok:'4–6'},
-          {label:'P in Top 50',  val:diagnostics.spIn50,  lo:10, hi:16, ok:'12–16'},
-          {label:'P in Top 100', val:diagnostics.spIn100, lo:22, hi:30, ok:'25–32'},
-          {label:'CL in Top 20', val:diagnostics.clIn20,  lo:1,  hi:3,  ok:'1–3'},
-          {label:'CL in Top 50', val:diagnostics.clIn50,  lo:3,  hi:6,  ok:'3–6'},
-          {label:'RP in Top 50', val:diagnostics.rpIn50,  lo:5,  hi:10, ok:'5–10'},
+          {label:'SP in Top 20',  val:diagnostics.spIn20,  lo:3,  hi:5,  ok:'4–5'},
+          {label:'SP in Top 50',  val:diagnostics.spIn50,  lo:10, hi:16, ok:'12–16'},
+          {label:'SP in Top 100', val:diagnostics.spIn100, lo:22, hi:30, ok:'25–30'},
+          {label:'CL in Top 20',  val:diagnostics.clIn20,  lo:0,  hi:2,  ok:'0–2'},
+          {label:'CL in Top 50',  val:diagnostics.clIn50,  lo:2,  hi:5,  ok:'2–5'},
+          {label:'RP in Top 50',  val:diagnostics.rpIn50,  lo:2,  hi:5,  ok:'2–5'},
         ].map(r => {
           const ok = r.val >= r.lo && r.val <= r.hi
           const over = r.val > r.hi
