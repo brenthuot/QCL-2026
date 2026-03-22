@@ -228,19 +228,19 @@ export function buildRecommendations(
   //         4SP+3RP+2P-flex+3BN(pitchers only) = 12 pitcher slots → 24 total
   const HITTER_TARGET = 12
   const SP_MAX        = 7   // 4SP + 2P-flex + 1BN overflow
-  const CL_MAX        = 5   // 3RP + 2P-flex overflow (CLs + SUs combined)
+  const CL_MAX        = 4   // 4 closers: 3 RP slots + 1 P-flex, no SU drafted
   const PITCHER_MAX   = 12  // all pitcher slots including 3 BN (pitchers only)
 
   // RP merges into SP pool, SU merges into CL pool
   const spCount      = myPlayers.filter(p => ['SP','RP'].includes(p.pos)).length
-  const clCount      = myPlayers.filter(p => ['CL','SU'].includes(p.pos)).length
+  const clCount      = myPlayers.filter(p => p.pos === 'CL').length  // SU not drafted
 
   // Position diversity tracking
   const hittersByPos = {}
   for (const pl of myPlayers.filter(p => p.type === 'hitter'))
     hittersByPos[pl.pos] = (hittersByPos[pl.pos] ?? 0) + 1
   const POS_NEED = { C:1, '1B':1, '2B':1, '3B':1, SS:1, OF:4 }
-  const POS_SAT  = { C:2, '1B':3, '2B':2, '3B':2, SS:2, OF:6 }
+  const POS_SAT  = { C:1, '1B':3, '2B':2, '3B':2, SS:2, OF:6 }  // C:1 — bench is pitchers-only so only 1 C slot matters
 
   // Category projections
   const projK  = myTotals.K ?? 0
@@ -388,7 +388,7 @@ export function buildRecommendations(
       // ── SU HOLD URGENCY ───────────────────────────────────────────────────
       // Strategy: 3 SU in R14-18 = cheap path to top 4 in HD.
       // These rounds have little value anyway. HD target 61 HLD.
-      if (false && roundNum >= 13) {  // SU now handled in CL/SU pool above
+      if (false) {  // SU not drafted — stream holds
         const zHD = p.z_HD ?? 0
         const hdUrgency = hdPct < 0.70 ? 1.5 : hdPct < 0.85 ? 1.0 : 0.5
         const qualityBonus = zHD > 0.8 ? 0.5 : 0
