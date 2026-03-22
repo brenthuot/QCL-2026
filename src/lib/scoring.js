@@ -249,6 +249,23 @@ export function buildRecommendations(
       // ── HARD BLOCKS ───────────────────────────────────────────────────────
       // SU/RP: waiver-streamable early; only draft after R14 (top 3 in HD for free)
       if ((p.pos === 'SU' || p.pos === 'RP') && (roundNum < 14 || suCount >= SU_MAX)) return null
+      // Hard ADP reality check: don't recommend players the market considers
+      // far too early. Lookahead scales with where we are in the draft —
+      // early picks demand tighter consensus, late picks allow more reaching.
+      // pick 1-30:  +15 (only near-consensus picks)
+      // pick 31-60: +25 (small reaches ok)
+      // pick 61-100: +35 (position urgency can pull forward a bit)
+      // pick 101-150: +45 (mid-late, more flexibility)
+      // pick 150+:  +60 (late rounds, speculative picks fine)
+      if (currentPick != null && p.cbsADP) {
+        const lookahead = currentPick <= 30  ? 15
+          : currentPick <= 60  ? 25
+          : currentPick <= 100 ? 35
+          : currentPick <= 150 ? 45
+          : 60
+        if (p.cbsADP > currentPick + lookahead) return null
+      }
+
       // SP saturated
       if (p.pos === 'SP' && spCount >= SP_MAX) return null
       // CL saturated — 4th closer costs R4-5 elite hitter, not worth roto math
