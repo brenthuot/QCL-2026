@@ -48,8 +48,22 @@ export function computeGapWeights(myTotals, targets, roundNum = 1, sensitivity =
     weights[cat] = Math.max(0.2, Math.min(2.5, (0.2 + amplifiedGap * 2.3) * sensitivity))
   }
 
-  // SB: always thin, mild boost throughout
-  weights['SB'] = Math.min(3.0, (weights['SB'] ?? 1) * 1.15)
+  // SB: cap aggressively by round AND by team surplus
+  // Don't let a 0/152 start inflate SB weight to 2.88 from pick 1
+  // R1-3: cap at 0.6 (don't chase SB early — SB players often hurt OBP)
+  // R4-6: cap at 1.0
+  // R7+:  cap at 1.4 unless already near target
+  const sbRawWeight = weights['SB'] ?? 1
+  const sbCap = roundNum <= 3 ? 0.6 : roundNum <= 6 ? 1.0 : 1.4
+  const sbCurrent = myTotals.SB ?? 0
+  const sbTarget  = targets.SB?.third ?? 152
+  const sbPct     = sbTarget > 0 ? sbCurrent / sbTarget : 0
+  // Rapidly reduce SB weight once team is approaching target
+  const sbSurplusMult = sbPct >= 1.0 ? 0.1   // over target — almost zero weight
+    : sbPct >= 0.85 ? 0.3                       // 85%+ — strongly reduce
+    : sbPct >= 0.65 ? 0.7                       // 65%+ — moderately reduce
+    : 1.0
+  weights['SB'] = Math.min(sbCap, sbRawWeight * 1.15 * sbSurplusMult)
 
   // S (Saves): hard-cap gap weight by round — don't let a 0/115 total
   // create a 2.5 weight that inflates every closer artificially
@@ -181,12 +195,12 @@ export function catProgress(current, target, isNeg = false) {
 export function rosterRoles(myPlayers) {
   const pitchers = myPlayers.filter(p => p.type === 'pitcher')
   return {
-    winContributors: pitchers.filter(p => (p.W ?? 0) >= 5 || (p.IP ?? 0) >= 100).length,
-    closers: pitchers.filter(p => (p.SV ?? 0) >= 8).length,
-    holdSpec: pitchers.filter(p => (p.HLD ?? 0) >= 8 && (p.SV ?? 0) < 8).length,
-    totalSP: pitchers.filter(p => p.pos === 'SP').length,
-    totalCL: pitchers.filter(p => p.pos === 'CL').length,
-    totalRP: pitchers.filter(p => ['RP', 'SU'].includes(p.pos)).length,
+    // RP merges into SP pool; SU merges into CL pool
+    winContributors: pitchers.filter(p => ['SP','RP'].includes(p.pos) && ((p.W ?? 0) >= 5 || (p.IP ?? 0) >= 100)).length,
+    closers:  pitchers.filter(p => ['CL','SU'].includes(p.pos) && (p.SV ?? 0) >= 8).length,
+    holdSpec: pitchers.filter(p => ['CL','SU'].includes(p.pos) && (p.HLD ?? 0) >= 5).length,
+    totalSP:  pitchers.filter(p => ['SP','RP'].includes(p.pos)).length,
+    totalCL:  pitchers.filter(p => ['CL','SU'].includes(p.pos)).length,
   }
 }
 
@@ -198,20 +212,23 @@ export function buildRecommendations(
   const roles       = rosterRoles(myPlayers)
   const hitterCount = myPlayers.filter(p => p.type === 'hitter').length
   const pitcherCount= myPlayers.filter(p => p.type === 'pitcher').length
-  const spCount     = myPlayers.filter(p => p.pos === 'SP').length
-  const clCount     = myPlayers.filter(p => p.pos === 'CL').length
-  const suCount     = myPlayers.filter(p => ['SU','RP'].includes(p.pos)).length
+  // spCount/clCount defined below with merged pools
 
   // ── ROSTER SLOT LIMITS ───────────────────────────────────────────────────
   // Derived from strategic analysis of 5 mocks + roto math:
   // • 3 CLs = top 4-5 in S  (~91-100 SV). 4th CL costs R4-5 elite hitter — not worth it.
   // • 3 SU in R14-18 = genuine top 4 in HD at almost zero opportunity cost
   // • Never more than 2 of any non-OF hitter position (SS overload kills OBP)
-  const HITTER_TARGET = 13
-  const SP_MAX        = 6
-  const CL_MAX        = 3   // 3 closers optimal — 4th costs too much in rounds 4-5
-  const SU_MAX        = 3   // 3 hold specialists in R14-18 = top 4 HD cheaply
-  const PITCHER_MAX   = 9
+  // Roster: C+1B+2B+3B+SS+4OF+3UTIL = 12 hitter slots
+  //         4SP+3RP+2P-flex+3BN(pitchers only) = 12 pitcher slots → 24 total
+  const HITTER_TARGET = 12
+  const SP_MAX        = 7   // 4SP + 2P-flex + 1BN overflow
+  const CL_MAX        = 5   // 3RP + 2P-flex overflow (CLs + SUs combined)
+  const PITCHER_MAX   = 12  // all pitcher slots including 3 BN (pitchers only)
+
+  // RP merges into SP pool, SU merges into CL pool
+  const spCount      = myPlayers.filter(p => ['SP','RP'].includes(p.pos)).length
+  const clCount      = myPlayers.filter(p => ['CL','SU'].includes(p.pos)).length
 
   // Position diversity tracking
   const hittersByPos = {}
@@ -247,8 +264,9 @@ export function buildRecommendations(
       let reasons = []
 
       // ── HARD BLOCKS ───────────────────────────────────────────────────────
-      // SU/RP: waiver-streamable early; only draft after R14 (top 3 in HD for free)
-      if ((p.pos === 'SU' || p.pos === 'RP') && (roundNum < 14 || suCount >= SU_MAX)) return null
+      // Hitter hard block: bench is pitchers-only. Once all 12 hitter slots
+      // are filled, no more hitters should ever be recommended.
+      if (p.type === 'hitter' && hitterCount >= HITTER_TARGET) return null
       // Hard ADP reality check: don't recommend players the market considers
       // far too early. Lookahead scales with where we are in the draft —
       // early picks demand tighter consensus, late picks allow more reaching.
@@ -266,10 +284,13 @@ export function buildRecommendations(
         if (p.cbsADP > currentPick + lookahead) return null
       }
 
-      // SP saturated
-      if (p.pos === 'SP' && spCount >= SP_MAX) return null
-      // CL saturated — 4th closer costs R4-5 elite hitter, not worth roto math
-      if (p.pos === 'CL' && clCount >= CL_MAX) return null
+      // SP+RP pool saturated
+      if (['SP','RP'].includes(p.pos) && spCount >= SP_MAX) return null
+      // CL+SU pool: gate before R7 (saves first), then saturate
+      if (['CL','SU'].includes(p.pos)) {
+        if (roundNum < 7) return null
+        if (clCount >= CL_MAX) return null
+      }
       // Pitcher roster full
       if (p.type === 'pitcher' && pitcherCount >= PITCHER_MAX) return null
       // Hitter pace critical — block all pitchers
@@ -359,7 +380,7 @@ export function buildRecommendations(
       // ── SU HOLD URGENCY ───────────────────────────────────────────────────
       // Strategy: 3 SU in R14-18 = cheap path to top 4 in HD.
       // These rounds have little value anyway. HD target 61 HLD.
-      if ((p.pos === 'SU' || p.pos === 'RP') && suCount < SU_MAX && roundNum >= 14) {
+      if (false && roundNum >= 13) {  // SU now handled in CL/SU pool above
         const zHD = p.z_HD ?? 0
         const hdUrgency = hdPct < 0.70 ? 1.5 : hdPct < 0.85 ? 1.0 : 0.5
         const qualityBonus = zHD > 0.8 ? 0.5 : 0
@@ -368,12 +389,13 @@ export function buildRecommendations(
       }
 
       // ── SP STRIKEOUT URGENCY ──────────────────────────────────────────────
-      // K is the hardest pitching cat — heavily favor high-K arms.
-      // Gate: only after R6 with basic hitter core built.
-      if (p.pos === 'SP' && spCount < SP_MAX && kPct < 0.80 && roundNum >= 6 && hitterCount >= 2) {
+      // K is the hardest pitching cat — cannot be streamed, must be drafted.
+      // Multiplier 1.5x makes high-K arms competitive with SB hitters.
+      // Gate lowered to R5 so it fires before too many low-K SPs sneak in.
+      if (['SP','RP'].includes(p.pos) && spCount < SP_MAX && kPct < 0.85 && roundNum >= 5 && hitterCount >= 2) {
         const zK = p.z_K ?? 0
         if (zK > 0.5) {
-          const kUrgency = zK * 0.6 * (1 - kPct)
+          const kUrgency = zK * 1.5 * (1 - kPct)
           urgencyBoost += kUrgency
           reasons.push(`K gap ${Math.round((1-kPct)*100)}% — ${Math.round(p.SO ?? 0)}K projected`)
         }
@@ -381,7 +403,7 @@ export function buildRecommendations(
 
       // ── SP WIN URGENCY ────────────────────────────────────────────────────
       // Only after R5 with hitter core started.
-      if (p.pos === 'SP' && roles.winContributors < 7 && spCount < SP_MAX && roundNum >= 5 && hitterCount >= 3) {
+      if (['SP','RP'].includes(p.pos) && roles.winContributors < 7 && spCount < SP_MAX && roundNum >= 5 && hitterCount >= 3) {
         const spUrgency = Math.max(0, 0.8 - (spCount - 2) * 0.3)
         urgencyBoost += spUrgency
         if (spUrgency > 0) reasons.push(`Win contributors ${roles.winContributors}/7 — W gap`)
