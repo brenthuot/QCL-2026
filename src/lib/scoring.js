@@ -257,12 +257,12 @@ export function buildRecommendations(
       }
 
       // ── STRIKEOUT URGENCY ─────────────────────────────────────────────────
-      // K is the hardest pitching category to accumulate — needs high-K SPs
-      // Give explicit boost to high-K starters when K gap is large
-      if (p.pos === 'SP' && spCount < SP_MAX && kPct < 0.80) {
+      // K urgency only fires after round 6 — don't let it override elite hitters early.
+      // Also requires having at least 2 hitters already (basic team foundation).
+      if (p.pos === 'SP' && spCount < SP_MAX && kPct < 0.80 && roundNum >= 6 && hitterCount >= 2) {
         const zK = p.z_K ?? 0
         if (zK > 0.5) {
-          const kUrgency = zK * 0.6 * (1 - kPct)  // scales with both K quality and gap
+          const kUrgency = zK * 0.6 * (1 - kPct)
           urgencyBoost += kUrgency
           reasons.push(`K gap ${Math.round((1-kPct)*100)}% — high strikeout arm`)
         }
@@ -281,8 +281,8 @@ export function buildRecommendations(
         }
       }
 
-      // SP win urgency (scales down as you accumulate SPs)
-      if (p.pos === 'SP' && roles.winContributors < 7 && spCount < SP_MAX) {
+      // SP win urgency — only fires after round 5 (build hitter core first)
+      if (p.pos === 'SP' && roles.winContributors < 7 && spCount < SP_MAX && roundNum >= 5 && hitterCount >= 3) {
         const spUrgency = Math.max(0, 0.8 - (spCount - 2) * 0.3)
         urgencyBoost += spUrgency
         if (spUrgency > 0) reasons.push(`Need win contributors (${roles.winContributors}/7)`)
