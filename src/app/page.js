@@ -303,9 +303,10 @@ export default function App() {
   const recommendations = useMemo(() =>
     buildRecommendations(
       scoredPlayers.filter(p => !p.drafted && !p.isKeeper),
-      myPlayers, targets, round, myTotals, recGapWeights, scoredPlayers
+      myPlayers, targets, round, myTotals, recGapWeights, scoredPlayers,
+      nextPick?.overall  // current pick number for accurate edge display
     ).slice(0, 8),
-  [scoredPlayers, myPlayers, targets, round, myTotals, recGapWeights])
+  [scoredPlayers, myPlayers, targets, round, myTotals, recGapWeights, nextPick])
 
   const diagnostics = useMemo(() => {
     const avail  = scoredPlayers.filter(p => !p.drafted && !p.isKeeper)
