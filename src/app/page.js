@@ -498,7 +498,7 @@ export default function App() {
           )}
           {tab==='rec' && (
             <Recommendations recommendations={recommendations} round={round} roles={roles} myPlayers={myPlayers}
-              onDraftMe={p => markDrafted(p,true)} onSelectPlayer={setSelectedPlayer}
+              targets={targets} onDraftMe={p => markDrafted(p,true)} onSelectPlayer={setSelectedPlayer}
             />
           )}
           {tab==='strategy' && (
@@ -1112,7 +1112,7 @@ function CategoryDashboard({ myTotals, targets, gapWeights }) {
 }
 
 // ── RECOMMENDATIONS ───────────────────────────────────────────────────────────
-function Recommendations({ recommendations, round, roles, myPlayers, onDraftMe, onSelectPlayer }) {
+function Recommendations({ recommendations, round, roles, myPlayers, targets, onDraftMe, onSelectPlayer }) {
   return (
     <div style={{padding:12,overflow:'auto'}}>
       <div style={{marginBottom:12}}>
