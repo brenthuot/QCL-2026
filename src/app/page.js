@@ -91,9 +91,9 @@ const SLOTS = [
   {id:'RP3',  label:'RP',   elig:['RP','CL','SU']                  },
   {id:'P1',   label:'P',    elig:['SP','RP','CL','SU']             },
   {id:'P2',   label:'P',    elig:['SP','RP','CL','SU']             },
-  {id:'BN1',  label:'BN',   elig:['C','1B','2B','3B','SS','OF','SP','RP','CL','SU'] },
-  {id:'BN2',  label:'BN',   elig:['C','1B','2B','3B','SS','OF','SP','RP','CL','SU'] },
-  {id:'BN3',  label:'BN',   elig:['C','1B','2B','3B','SS','OF','SP','RP','CL','SU'] },
+  {id:'BN1',  label:'BN',   elig:['SP','RP','CL','SU'] },  // bench = pitchers only
+  {id:'BN2',  label:'BN',   elig:['SP','RP','CL','SU'] },
+  {id:'BN3',  label:'BN',   elig:['SP','RP','CL','SU'] },
 ]
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -255,8 +255,8 @@ export default function App() {
     const hitW = hitWeight / 100
     const all = allPlayers.map(p => {
       const { liveScore, liveBreakdown } = computeLiveScore(p, gapWeights)
-      // CL: ~1.0 so top closers rank ~35-50 (mock R4-9); SU/RP: suppressed (stream on waivers)
-      const rpDampener = p.pos==='CL' ? 1.02 : p.pos==='SU' ? 0.18 : p.pos==='RP' ? 0.18 : 1.0
+      // RP merges into SP pool (no dampener); SU merges into CL pool
+      const rpDampener = ['CL','SU'].includes(p.pos) ? 1.02 : 1.0
       const typeScale  = p.type==='hitter' ? hitW*2 : pitW*2*(p.pos==='SP' ? pitCompress : pitCompress*rpDampener)
       const kInfo = watchlistByPlayerId[p.id]
       // ADP penalty/boost: compare our z-rank to CBS ADP
@@ -312,6 +312,7 @@ export default function App() {
           slots.push({ round: rd, overall: (rd-1)*10 + (rd%2===1?10:1) })
         }
         return slots.find(s => s.round >= round)?.overall ?? null
+        // HITTER_TARGET=12 used in scoring.js (bench=pitchers only)
       })()
     ).slice(0, 8),
   [scoredPlayers, myPlayers, targets, round, myTotals, recGapWeights])
@@ -642,7 +643,7 @@ function Sidebar({ diagnostics, hitWeight, setHitWeight, pitCompress, setPitComp
           </div>
         ))}
         <div style={{fontSize:10,color:'var(--text3)',marginBottom:6}}>Pitcher weight (auto): {100-hitWeight}%</div>
-        <div style={{fontSize:10,color:'var(--text3)',marginBottom:10}}>CL ×0.68 · SU/RP ×0.18 (waiver-stream)</div>
+        <div style={{fontSize:10,color:'var(--text3)',marginBottom:10}}>CL/SU ×1.02 · RP scores as SP</div>
         <button className="btn btn-ghost btn-sm" style={{width:'100%',fontSize:10}}
           onClick={() => { setHitWeight(50); setPitCompress(0.92); setGapSensitivity(1.0) }}>
           Reset to defaults
@@ -653,7 +654,7 @@ function Sidebar({ diagnostics, hitWeight, setHitWeight, pitCompress, setPitComp
         {[
           {label:'Win Contributors', sub:'W≥5 or IP≥100', cur:roles.winContributors, target:7},
           {label:'Closers (S)',      sub:'SV≥8',          cur:roles.closers,         target:3},
-          {label:'Hold Spec (HD)',   sub:'Stream on wire', cur:roles.holdSpec,        target:2},
+          {label:'HD (stream FAs)',   sub:'Stream on wire', cur:roles.holdSpec,        target:2},
         ].map(r => {
           const c = r.cur>=r.target?'var(--green)':r.cur>=r.target-1?'var(--yellow)':'var(--red)'
           return (
@@ -1043,7 +1044,7 @@ function MyTeam({ myPlayers, myTotals, targets, roles, onUndraft, keeperIds, onS
           {[
             {label:'Win Contributors',cur:roles.winContributors,target:7,hint:'W≥5 or IP≥100'},
             {label:'Closers (S)',      cur:roles.closers,        target:3,hint:'SV≥8'},
-            {label:'Hold Spec (HD)',   cur:roles.holdSpec,       target:2,hint:'Stream on waivers'},
+            {label:'HD (stream FAs)',   cur:roles.holdSpec,       target:2,hint:'Stream on waivers'},
           ].map(r => {
             const color=r.cur>=r.target?'var(--green)':r.cur>=r.target-1?'var(--yellow)':'var(--red)'
             return (
@@ -1138,9 +1139,8 @@ function Recommendations({ recommendations, round, roles, myPlayers, targets, on
       {/* Roster balance status */}
       {(() => {
         const hitterCount  = myPlayers.filter(p => p.type==='hitter').length
-        const spCount      = myPlayers.filter(p => p.pos==='SP').length
-        const clCount      = myPlayers.filter(p => p.pos==='CL').length
-        const suCount      = myPlayers.filter(p => ['SU','RP'].includes(p.pos)).length
+        const spCount      = myPlayers.filter(p => ['SP','RP'].includes(p.pos)).length
+        const clCount      = myPlayers.filter(p => p.pos === 'CL').length  // SU not drafted
         const ssByPos      = myPlayers.filter(p => p.pos==='SS').length
         const twoBByPos    = myPlayers.filter(p => p.pos==='2B').length
         const cByPos       = myPlayers.filter(p => p.pos==='C').length
@@ -1164,10 +1164,9 @@ function Recommendations({ recommendations, round, roles, myPlayers, targets, on
         )
         return (
           <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10,fontSize:11}}>
-            {pill(`H ${hitterCount}/13`, hitterCount>=10, hitterCount>=7)}
-            {pill(`SP ${spCount}/6`, spCount<=5, spCount<=6)}
-            {pill(`CL ${clCount}/3`, clCount===3, clCount>=1)}
-            {pill(`SU ${suCount}/3`, suCount===3, suCount>=1)}
+            {pill(`H ${hitterCount}/12`, hitterCount>=10, hitterCount>=7)}
+            {pill(`SP+RP ${spCount}/7`, spCount<=6, spCount<=7)}
+            {pill(`CL ${clCount}/4`, clCount===4, clCount>=2)}
             {pill(`SS ${ssByPos}`, ssByPos<=2, ssByPos===3)}
             {pill(`2B ${twoBByPos}`, twoBByPos>=1, false)}
             {pill(`C ${cByPos}`, cByPos>=1, false)}
