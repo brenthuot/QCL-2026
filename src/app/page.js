@@ -1125,42 +1125,34 @@ function Recommendations({ recommendations, round, roles, myPlayers, onDraftMe, 
       {/* Roster balance status */}
       {(() => {
         const hitterCount  = myPlayers.filter(p => p.type==='hitter').length
-        const pitcherCount = myPlayers.filter(p => p.type==='pitcher').length
         const spCount      = myPlayers.filter(p => p.pos==='SP').length
         const clCount      = myPlayers.filter(p => p.pos==='CL').length
+        const ssByPos      = myPlayers.filter(p => p.pos==='SS').length
+        const twoBByPos    = myPlayers.filter(p => p.pos==='2B').length
+        const cByPos       = myPlayers.filter(p => p.pos==='C').length
         const expectedH    = Math.round(round * (13/24))
         const deficit      = expectedH - hitterCount
+        const pill = (label, ok, warn) => (
+          <span style={{padding:'3px 8px',borderRadius:4,fontWeight:600,
+            background:ok?'rgba(63,185,80,0.1)':warn?'rgba(210,153,34,0.1)':'rgba(248,81,73,0.1)',
+            color:ok?'var(--green)':warn?'var(--yellow)':'var(--red)',
+            border:`1px solid ${ok?'rgba(63,185,80,0.3)':warn?'rgba(210,153,34,0.3)':'rgba(248,81,73,0.3)'}`}}>
+            {label}
+          </span>
+        )
         return (
-          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10,fontSize:11}}>
-            <span style={{padding:'3px 8px',borderRadius:4,fontWeight:600,
-              background:hitterCount>=10?'rgba(63,185,80,0.1)':'rgba(248,81,73,0.1)',
-              color:hitterCount>=10?'var(--green)':'var(--red)',
-              border:`1px solid ${hitterCount>=10?'rgba(63,185,80,0.3)':'rgba(248,81,73,0.3)'}`}}>
-              Hitters {hitterCount}/13
-            </span>
-            <span style={{padding:'3px 8px',borderRadius:4,fontWeight:600,
-              background:spCount<=6?'rgba(63,185,80,0.1)':'rgba(248,81,73,0.1)',
-              color:spCount<=6?'var(--green)':'var(--red)',
-              border:`1px solid ${spCount<=6?'rgba(63,185,80,0.3)':'rgba(248,81,73,0.3)'}`}}>
-              SPs {spCount}/6 max
-            </span>
-            <span style={{padding:'3px 8px',borderRadius:4,fontWeight:600,
-              background:clCount<=3?'rgba(63,185,80,0.1)':'rgba(248,81,73,0.1)',
-              color:clCount<=3?'var(--green)':'var(--red)',
-              border:`1px solid ${clCount<=3?'rgba(63,185,80,0.3)':'rgba(248,81,73,0.3)'}`}}>
-              CLs {clCount}/3 max
-            </span>
-            <span style={{padding:'3px 8px',borderRadius:4,fontWeight:600,
-              background:spCount<=6?'rgba(63,185,80,0.1)':'rgba(248,81,73,0.1)',
-              color:spCount<=6?'var(--green)':'var(--red)',
-              border:`1px solid ${spCount<=6?'rgba(63,185,80,0.3)':'rgba(248,81,73,0.3)'}`}}>
-              SPs {spCount}/6 max
-            </span>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10,fontSize:11}}>
+            {pill(`H ${hitterCount}/13`, hitterCount>=10, hitterCount>=7)}
+            {pill(`SP ${spCount}/6`, spCount<=5, spCount<=6)}
+            {pill(`CL ${clCount}/3`, clCount>=2&&clCount<=3, clCount===1)}
+            {pill(`SS ${ssByPos}`, ssByPos<=2, ssByPos===3)}
+            {pill(`2B ${twoBByPos}`, twoBByPos>=1, false)}
+            {pill(`C ${cByPos}`, cByPos>=1, false)}
             {deficit >= 2 && (
               <span style={{padding:'3px 8px',borderRadius:4,fontWeight:700,
                 background:'rgba(248,81,73,0.15)',color:'var(--red)',
                 border:'1px solid rgba(248,81,73,0.35)'}}>
-                ⚠ Behind on hitters — pitchers suppressed
+                ⚠ Behind on hitters
               </span>
             )}
           </div>
