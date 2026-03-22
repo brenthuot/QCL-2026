@@ -226,7 +226,10 @@ export default function App() {
   const myPlayers  = useMemo(() => myPlayerIds.map(id => playerById[id]).filter(Boolean), [myPlayerIds, playerById])
   const myTotals   = useMemo(() => computeTeamTotals(myPlayers), [myPlayers])
   const targets    = config?.targets ?? {}
-  const gapWeights = useMemo(() => computeGapWeights(myTotals, targets, round, gapSensitivity), [myTotals, targets, round, gapSensitivity])
+  // Board weights — no rate amplification (keeps board rankings clean)
+  const gapWeights = useMemo(() => computeGapWeights(myTotals, targets, round, gapSensitivity, false), [myTotals, targets, round, gapSensitivity])
+  // Recs weights — OBP/ERA/WHIP amplified so rate stats surface in recommendations
+  const recGapWeights = useMemo(() => computeGapWeights(myTotals, targets, round, gapSensitivity, true), [myTotals, targets, round, gapSensitivity])
 
   // Watchlist lookup by player id
   const watchlistByPlayerId = useMemo(() => {
@@ -300,9 +303,9 @@ export default function App() {
   const recommendations = useMemo(() =>
     buildRecommendations(
       scoredPlayers.filter(p => !p.drafted && !p.isKeeper),
-      myPlayers, targets, round, myTotals, gapWeights, scoredPlayers
+      myPlayers, targets, round, myTotals, recGapWeights, scoredPlayers
     ).slice(0, 8),
-  [scoredPlayers, myPlayers, targets, round, myTotals, gapWeights])
+  [scoredPlayers, myPlayers, targets, round, myTotals, recGapWeights])
 
   const diagnostics = useMemo(() => {
     const avail  = scoredPlayers.filter(p => !p.drafted && !p.isKeeper)
@@ -490,7 +493,7 @@ export default function App() {
             />
           )}
           {tab==='cats' && (
-            <CategoryDashboard myTotals={myTotals} targets={targets} gapWeights={gapWeights} />
+            <CategoryDashboard myTotals={myTotals} targets={targets} gapWeights={recGapWeights} />
           )}
           {tab==='rec' && (
             <Recommendations recommendations={recommendations} round={round} roles={roles} myPlayers={myPlayers}
@@ -1127,11 +1130,20 @@ function Recommendations({ recommendations, round, roles, myPlayers, onDraftMe, 
         const hitterCount  = myPlayers.filter(p => p.type==='hitter').length
         const spCount      = myPlayers.filter(p => p.pos==='SP').length
         const clCount      = myPlayers.filter(p => p.pos==='CL').length
+        const suCount      = myPlayers.filter(p => ['SU','RP'].includes(p.pos)).length
         const ssByPos      = myPlayers.filter(p => p.pos==='SS').length
         const twoBByPos    = myPlayers.filter(p => p.pos==='2B').length
         const cByPos       = myPlayers.filter(p => p.pos==='C').length
         const expectedH    = Math.round(round * (13/24))
         const deficit      = expectedH - hitterCount
+
+        // Live team OBP
+        const batters = myPlayers.filter(p => p.type==='hitter' && (p.OBP??0) > 0)
+        const teamOBP = batters.length
+          ? batters.reduce((s,p)=>s+(p.OBP??0.320)*(p.PA??500),0) / batters.reduce((s,p)=>s+(p.PA??500),0)
+          : null
+        const obpTarget = targets.OBP?.third ?? 0.345
+
         const pill = (label, ok, warn) => (
           <span style={{padding:'3px 8px',borderRadius:4,fontWeight:600,
             background:ok?'rgba(63,185,80,0.1)':warn?'rgba(210,153,34,0.1)':'rgba(248,81,73,0.1)',
@@ -1144,10 +1156,12 @@ function Recommendations({ recommendations, round, roles, myPlayers, onDraftMe, 
           <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10,fontSize:11}}>
             {pill(`H ${hitterCount}/13`, hitterCount>=10, hitterCount>=7)}
             {pill(`SP ${spCount}/6`, spCount<=5, spCount<=6)}
-            {pill(`CL ${clCount}/3`, clCount>=2&&clCount<=3, clCount===1)}
+            {pill(`CL ${clCount}/3`, clCount===3, clCount>=1)}
+            {pill(`SU ${suCount}/3`, suCount===3, suCount>=1)}
             {pill(`SS ${ssByPos}`, ssByPos<=2, ssByPos===3)}
             {pill(`2B ${twoBByPos}`, twoBByPos>=1, false)}
             {pill(`C ${cByPos}`, cByPos>=1, false)}
+            {teamOBP!=null && pill(`OBP ${teamOBP.toFixed(3)}`, teamOBP>=obpTarget-0.005, teamOBP>=obpTarget-0.015)}
             {deficit >= 2 && (
               <span style={{padding:'3px 8px',borderRadius:4,fontWeight:700,
                 background:'rgba(248,81,73,0.15)',color:'var(--red)',
