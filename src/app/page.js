@@ -159,7 +159,7 @@ export default function App() {
   const [myPlayerIds, setMyPlayerIds] = useState([])
   const [keeperIds,   setKeeperIds]   = useState(new Set())
   const [myKeeperIds, setMyKeeperIds] = useState([])
-  const [round,       setRound]       = useState(1)
+  const [round, setRound] = useState(1)
 
   // Selected player panel
   const [selectedPlayer, setSelectedPlayer] = useState(null)
@@ -311,11 +311,13 @@ export default function App() {
           if (rd === 14 || rd === 19) continue
           slots.push({ round: rd, overall: (rd-1)*10 + (rd%2===1?10:1) })
         }
-        return slots.find(s => s.round >= round)?.overall ?? null
-        // HITTER_TARGET=12 used in scoring.js (bench=pitchers only)
+        const eligible = slots.filter(s => s.round >= round)
+        // pickOffset shifts which slot we're targeting
+        const idx = Math.max(0, Math.min(eligible.length-1, 0 + pickOffset))
+        return eligible[idx]?.overall ?? null
       })()
     ).slice(0, 8),
-  [scoredPlayers, myPlayers, targets, round, myTotals, recGapWeights])
+  [scoredPlayers, myPlayers, targets, round, myTotals, recGapWeights, pickOffset])
 
   const diagnostics = useMemo(() => {
     const avail  = scoredPlayers.filter(p => !p.drafted && !p.isKeeper)
@@ -349,13 +351,26 @@ export default function App() {
 
   // Actions
   const markDrafted = useCallback((player, isMine) => {
-    setDraftedIds(prev => new Set([...prev, player.id]))
-    if (isMine && !myPlayerIds.includes(player.id)) setMyPlayerIds(prev => [...prev, player.id])
-    setRound(() => {
-      const nd = [...draftedIds].filter(id => !keeperIds.has(id)).length + 1
-      return Math.max(1, Math.floor(nd/TOTAL_TEAMS) + 1)
+    setDraftedIds(prev => {
+      const next = new Set([...prev, player.id])
+      // Compute round from FRESH state inside the functional update — no stale closure
+      // Use total draftedIds size (keepers included) since import sets round from parsed round numbers
+      // For live drafts: advance round based on the just-updated total non-keeper count
+      if (!keeperIds.has(player.id)) {
+        const newNonKeeper = [...next].filter(id => !keeperIds.has(id)).length
+        // +keepersCalled adjusts for keepers already called in completed rounds
+        // We approximate by counting keepers in draftedIds that ARE in keeperIds
+        const keepersCalled = [...next].filter(id => keeperIds.has(id)).length - keeperIds.size
+        // keepersCalled can't be negative (pre-loaded keepers aren't "called" yet)
+        const adj = Math.max(0, keepersCalled)
+        const effectiveTotal = newNonKeeper + adj
+        const newRound = Math.max(1, Math.floor(effectiveTotal / TOTAL_TEAMS) + 1)
+        setRound(newRound)
+      }
+      return next
     })
-  }, [draftedIds, myPlayerIds, keeperIds])
+    if (isMine && !myPlayerIds.includes(player.id)) setMyPlayerIds(prev => [...prev, player.id])
+  }, [myPlayerIds, keeperIds])
 
   const undraftPlayer = useCallback((id) => {
     if (keeperIds.has(id)) return
