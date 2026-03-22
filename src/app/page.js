@@ -1182,9 +1182,31 @@ function Recommendations({ recommendations, round, roles, myPlayers, targets, on
           </div>
         )
       })()}
-      {roles.closers < 3 && round > 6 && (
-        <div className="alert alert-warn" style={{marginBottom:8}}>⚠ Only {roles.closers}/3 closers — Saves gap growing. Target a CL this round.</div>
-      )}
+      {(() => {
+        // CL alert logic — show only when actionable:
+        // - After round 6 (don't chase saves early)
+        // - Still need closers
+        // - Not already past prime closer rounds (R13+) where reaching is too costly
+        // Message varies by urgency level
+        if (roles.closers >= 3) return null
+        if (round <= 6) return null
+        const projSV = myPlayers.filter(p=>p.pos==='CL').reduce((s,p)=>s+(p.SV??0),0)
+        const svPct  = projSV / (targets?.S?.third ?? 115)
+
+        if (round <= 12) {
+          // Prime closer window — be direct
+          return <div className="alert alert-warn" style={{marginBottom:8}}>
+            Closers {roles.closers}/3 · {projSV} SV projected ({Math.round(svPct*100)}% of target) · Good closer rounds remaining — take one when the value is there.
+          </div>
+        }
+        if (round <= 18 && roles.closers === 0) {
+          // Very late, no closers at all — more urgent
+          return <div className="alert alert-warn" style={{marginBottom:8}}>
+            No closers drafted · Saves will finish near last — consider pivoting or accepting the punt.
+          </div>
+        }
+        return null
+      })()}
       <div style={{display:'flex',flexDirection:'column',gap:8}}>
         {recommendations.map((p,i) => (
           <div key={p.id} className={`rec-card ${i===0?'top':''}`}
