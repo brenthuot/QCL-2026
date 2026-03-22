@@ -327,15 +327,15 @@ export default function App() {
   const myPickSlots = useMemo(() => getMyPickSlots(), [])
   const nonKeeperDrafted = useMemo(() => [...draftedIds].filter(id => !keeperIds.has(id)).length, [draftedIds, keeperIds])
   const nextPick = useMemo(() => {
-    // Use only non-keeper drafted picks for overall position
-    // Keepers slot into their specific rounds, not overall picks 1-N
-    const currentOverall = nonKeeperDrafted + 1 + pickOffset
-    const mySlot = myPickSlots.find(s => {
-      if (s.round === 14 || s.round === 19) return false  // keeper slots
-      return s.overall >= currentOverall
-    })
-    return mySlot
-  }, [myPickSlots, nonKeeperDrafted, pickOffset])
+    // Use `round` directly — it's set correctly by import (max round + 1)
+    // and by markDrafted (nd/10 + 1). Avoids keeper-count drift entirely.
+    // pickOffset shifts by N of MY slots (not overall picks).
+    const eligible = myPickSlots.filter(s => s.round !== 14 && s.round !== 19)
+    const baseIdx  = eligible.findIndex(s => s.round >= round)
+    if (baseIdx === -1) return null
+    const idx = Math.max(0, Math.min(eligible.length - 1, baseIdx + pickOffset))
+    return eligible[idx] ?? null
+  }, [myPickSlots, round, pickOffset])
 
   // Actions
   const markDrafted = useCallback((player, isMine) => {
@@ -434,6 +434,7 @@ export default function App() {
           {/* Pick offset widget */}
           <div style={{display:'flex',alignItems:'center',gap:4,background:'var(--bg3)',border:'1px solid var(--border2)',borderRadius:6,padding:'3px 8px'}}>
             <span style={{fontSize:10,color:'var(--text3)',whiteSpace:'nowrap'}}>Pick adj</span>
+            <span style={{fontSize:9,color:'var(--text3)'}} title="Shift pick counter forward/back if it drifts">±slots</span>
             <button onClick={() => setPickOffset(o => o - 1)} style={{background:'none',border:'none',color:'var(--text2)',cursor:'pointer',fontSize:14,padding:'0 3px',lineHeight:1}}>−</button>
             <span style={{fontSize:12,fontWeight:700,color:pickOffset!==0?'var(--yellow)':'var(--text2)',minWidth:20,textAlign:'center'}}>{pickOffset > 0 ? `+${pickOffset}` : pickOffset}</span>
             <button onClick={() => setPickOffset(o => o + 1)} style={{background:'none',border:'none',color:'var(--text2)',cursor:'pointer',fontSize:14,padding:'0 3px',lineHeight:1}}>+</button>
