@@ -193,7 +193,7 @@ export function rosterRoles(myPlayers) {
 // ── RECOMMENDATION ENGINE ─────────────────────────────────────────────────────
 export function buildRecommendations(
   availablePlayers, myPlayers, targets, roundNum, myTotals, gapWeights,
-  fullPool
+  fullPool, currentPick
 ) {
   const roles       = rosterRoles(myPlayers)
   const hitterCount = myPlayers.filter(p => p.type === 'hitter').length
@@ -385,10 +385,15 @@ export function buildRecommendations(
         else if (edge < -30)  adpBoostPct = -0.12
         else if (edge < -15)  adpBoostPct = -0.06
 
+        // For reason text use current pick (more actionable) but keep board rank for penalty calc
+        const pickEdge = currentPick != null ? currentPick - p.cbsADP : edge
         if (adpBoostPct > 0)
-          reasons.push(`Value: our rank #${myRank} vs CBS ${p.cbsADP.toFixed(0)} (+${Math.round(edge)})`)
-        else if (adpBoostPct < 0)
-          reasons.push(`⚠ CBS ranks ${Math.round(Math.abs(edge))} spots later (ADP ${p.cbsADP.toFixed(0)})`)
+          reasons.push(`Value: pick #${currentPick ?? myRank} vs CBS ADP ${p.cbsADP.toFixed(0)} (+${Math.round(Math.abs(pickEdge))})`)
+        else if (adpBoostPct < 0) {
+          const spotsLater = Math.round(Math.abs(pickEdge))
+          if (spotsLater > 2)
+            reasons.push(`⚠ CBS ADP ${p.cbsADP.toFixed(0)} — ${spotsLater > 0 ? spotsLater + ' spots later than now' : 'near consensus'}`)
+        }
       }
 
       // ── CATEGORY GAP REASONS ──────────────────────────────────────────────
