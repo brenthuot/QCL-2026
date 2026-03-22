@@ -304,9 +304,17 @@ export default function App() {
     buildRecommendations(
       scoredPlayers.filter(p => !p.drafted && !p.isKeeper),
       myPlayers, targets, round, myTotals, recGapWeights, scoredPlayers,
-      nextPick?.overall  // current pick number for accurate edge display
+      // Compute current pick inline — no dependency on nextPick useMemo
+      (() => {
+        const slots = []
+        for (let rd = 1; rd <= 24; rd++) {
+          if (rd === 14 || rd === 19) continue
+          slots.push({ round: rd, overall: (rd-1)*10 + (rd%2===1?10:1) })
+        }
+        return slots.find(s => s.round >= round)?.overall ?? null
+      })()
     ).slice(0, 8),
-  [scoredPlayers, myPlayers, targets, round, myTotals, recGapWeights, nextPick])
+  [scoredPlayers, myPlayers, targets, round, myTotals, recGapWeights])
 
   const diagnostics = useMemo(() => {
     const avail  = scoredPlayers.filter(p => !p.drafted && !p.isKeeper)
