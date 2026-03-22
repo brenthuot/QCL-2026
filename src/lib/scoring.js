@@ -86,11 +86,16 @@ export function computeLiveScore(player, gapWeights) {
   let total = 0
   const breakdown = {}
 
+  // CL/SU pitch ~65 IP vs ~180 for SP — dampen K and W so high-K relievers
+  // (like Drew Anderson 147K/131IP) don't inflate to SP-tier scores
+  const isCLSU = ['CL','SU'].includes(player.pos)
+
   for (const cat of cats) {
     const zKey = `z_${cat}`
     let z = player[zKey] ?? 0
-    // Closers: W category is irrelevant — they don't accumulate wins
-    if (player.pos === 'CL' && cat === 'W') z = 0
+    // CL/SU: W is irrelevant; K contribution is ~35% of an SP's (IP ratio)
+    if (isCLSU && cat === 'W') z = 0
+    if (isCLSU && cat === 'K') z = z * 0.35
     const w = gapWeights[cat] ?? 1
     const contribution = z * w
     breakdown[cat] = { z: round2(z), w: round2(w), contribution: round2(contribution) }
@@ -267,6 +272,9 @@ export function buildRecommendations(
       // Hitter hard block: bench is pitchers-only. Once all 12 hitter slots
       // are filled, no more hitters should ever be recommended.
       if (p.type === 'hitter' && hitterCount >= HITTER_TARGET) return null
+      // Players with no CBS ADP and ADP=999 are deep unknowns — gate to R14+
+      if (!p.cbsADP && (p.ADP == null || p.ADP >= 300) && roundNum < 14) return null
+
       // Hard ADP reality check: don't recommend players the market considers
       // far too early. Lookahead scales with where we are in the draft —
       // early picks demand tighter consensus, late picks allow more reaching.
