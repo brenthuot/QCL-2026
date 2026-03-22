@@ -21,28 +21,31 @@ export const CAT_KEY = {
 // ── GAP WEIGHTS ───────────────────────────────────────────────────────────────
 // Given my team's current projected totals and the JRH targets,
 // compute a weight per category (higher = more urgent need)
-export function computeGapWeights(myTotals, targets, roundNum = 1, sensitivity = 1.0) {
+export function computeGapWeights(myTotals, targets, roundNum = 1, sensitivity = 1.0, amplifyRateStats = false) {
+  // Rate stat amplifiers — only used for Recs tab (amplifyRateStats=true)
+  // Board uses raw gaps so rankings aren't distorted by OBP/ERA/WHIP inflation
+  const RATE_AMP = amplifyRateStats ? { OBP: 10, ERA: 8, WHIP: 12 } : {}
+
   const weights = {}
   for (const cat of ALL_CATS) {
     const target = targets[cat]?.third
     if (!target) { weights[cat] = 1; continue }
 
     const current = myTotals[cat] ?? 0
-    const isNeg = NEG_CATS.has(cat)
+    const isNeg   = NEG_CATS.has(cat)
+    const amp     = RATE_AMP[cat] ?? 1  // amplify rate stat gaps
 
     let gap
     if (isNeg) {
-      // For ERA/WHIP: current starts at 0 (no pitchers), builds toward target
-      // If current is 0, we treat it as full need
       if (current === 0) { weights[cat] = 1.5; continue }
-      // How far above target are we? (bad = above target for ERA/WHIP)
       gap = current > target ? (current - target) / target : 0
     } else {
       gap = Math.max(0, (target - current) / target)
     }
 
-    // Scale: 0 gap = 0.2 weight (still slightly valuable), 1 gap = 2.0 weight
-    weights[cat] = Math.max(0.2, Math.min(2.5, (0.2 + gap * 2.3) * sensitivity))
+    // Apply rate amplifier before scaling so OBP/ERA/WHIP reach meaningful weights
+    const amplifiedGap = Math.min(1, gap * amp)
+    weights[cat] = Math.max(0.2, Math.min(2.5, (0.2 + amplifiedGap * 2.3) * sensitivity))
   }
 
   // SB: always thin, mild boost throughout
@@ -192,41 +195,49 @@ export function buildRecommendations(
   availablePlayers, myPlayers, targets, roundNum, myTotals, gapWeights,
   fullPool
 ) {
-  const roles = rosterRoles(myPlayers)
-  const hitterCount  = myPlayers.filter(p => p.type === 'hitter').length
-  const pitcherCount = myPlayers.filter(p => p.type === 'pitcher').length
-  const spCount      = myPlayers.filter(p => p.pos === 'SP').length
-  const clCount      = myPlayers.filter(p => p.pos === 'CL').length
-  const suCount      = myPlayers.filter(p => ['SU','RP'].includes(p.pos)).length
+  const roles       = rosterRoles(myPlayers)
+  const hitterCount = myPlayers.filter(p => p.type === 'hitter').length
+  const pitcherCount= myPlayers.filter(p => p.type === 'pitcher').length
+  const spCount     = myPlayers.filter(p => p.pos === 'SP').length
+  const clCount     = myPlayers.filter(p => p.pos === 'CL').length
+  const suCount     = myPlayers.filter(p => ['SU','RP'].includes(p.pos)).length
 
+  // ── ROSTER SLOT LIMITS ───────────────────────────────────────────────────
+  // Derived from strategic analysis of 5 mocks + roto math:
+  // • 3 CLs = top 4-5 in S  (~91-100 SV). 4th CL costs R4-5 elite hitter — not worth it.
+  // • 3 SU in R14-18 = genuine top 4 in HD at almost zero opportunity cost
+  // • Never more than 2 of any non-OF hitter position (SS overload kills OBP)
   const HITTER_TARGET = 13
   const SP_MAX        = 6
-  const CL_MAX        = 3
-  const SU_MAX        = 2   // 2 hold specialists, only after round 14
+  const CL_MAX        = 3   // 3 closers optimal — 4th costs too much in rounds 4-5
+  const SU_MAX        = 3   // 3 hold specialists in R14-18 = top 4 HD cheaply
   const PITCHER_MAX   = 9
 
-  // Position counts for diversity tracking
+  // Position diversity tracking
   const hittersByPos = {}
-  for (const pl of myPlayers.filter(p => p.type === 'hitter')) {
+  for (const pl of myPlayers.filter(p => p.type === 'hitter'))
     hittersByPos[pl.pos] = (hittersByPos[pl.pos] ?? 0) + 1
-  }
-  // How many of each pos do we need (starter slot) and max before saturation
   const POS_NEED = { C:1, '1B':1, '2B':1, '3B':1, SS:1, OF:4 }
   const POS_SAT  = { C:2, '1B':3, '2B':2, '3B':2, SS:2, OF:6 }
 
-  const poolForRank = fullPool ?? availablePlayers
-  const sortedFull = [...poolForRank]
-    .filter(p => !p.isKeeper)
-    .sort((a, b) => (b.liveScore ?? -99) - (a.liveScore ?? -99))
-  const rankMap = new Map(sortedFull.map((p, i) => [p.id, i + 1]))
-
-  // Category gap tracking
-  const projK   = myTotals.K ?? 0
-  const projSV  = myTotals.S ?? 0
+  // Category projections
+  const projK  = myTotals.K ?? 0
+  const projSV = myTotals.S ?? 0
+  const projHD = myTotals.HD ?? 0
+  const projOBP= myTotals.OBP ?? 0
   const kTarget  = targets.K?.third  ?? 1525
   const svTarget = targets.S?.third  ?? 115
-  const kPct   = kTarget  > 0 ? projK  / kTarget  : 1
-  const svPct  = svTarget > 0 ? projSV / svTarget : 1
+  const hdTarget = targets.HD?.third ?? 61
+  const obpTarget= targets.OBP?.third?? 0.345
+  const kPct  = kTarget  > 0 ? projK  / kTarget  : 1
+  const svPct = svTarget > 0 ? projSV / svTarget  : 1
+  const hdPct = hdTarget > 0 ? projHD / hdTarget  : 1
+
+  // Stable rank map (full pool, keepers excluded)
+  const poolForRank = fullPool ?? availablePlayers
+  const sortedFull  = [...poolForRank].filter(p => !p.isKeeper)
+    .sort((a,b) => (b.liveScore ?? -99) - (a.liveScore ?? -99))
+  const rankMap = new Map(sortedFull.map((p,i) => [p.id, i+1]))
 
   return availablePlayers
     .filter(p => !p.drafted)
@@ -235,102 +246,132 @@ export function buildRecommendations(
       let urgencyBoost = 0
       let reasons = []
 
-      // ── ROSTER BALANCE GUARDRAILS ─────────────────────────────────────────
-
-      // SU/RP: only after round 14, max 2
-      if ((p.pos === 'SU' || p.pos === 'RP')) {
-        if (roundNum < 14 || suCount >= SU_MAX) return null
-      }
+      // ── HARD BLOCKS ───────────────────────────────────────────────────────
+      // SU/RP: waiver-streamable early; only draft after R14 (top 3 in HD for free)
+      if ((p.pos === 'SU' || p.pos === 'RP') && (roundNum < 14 || suCount >= SU_MAX)) return null
+      // SP saturated
       if (p.pos === 'SP' && spCount >= SP_MAX) return null
+      // CL saturated — 4th closer costs R4-5 elite hitter, not worth roto math
       if (p.pos === 'CL' && clCount >= CL_MAX) return null
+      // Pitcher roster full
       if (p.type === 'pitcher' && pitcherCount >= PITCHER_MAX) return null
-
-      // Hitter pace
-      const expectedHitters = Math.round(roundNum * (HITTER_TARGET / 24))
-      const hitterDeficit = expectedHitters - hitterCount
+      // Hitter pace critical — block all pitchers
+      const expectedH = Math.round(roundNum * (HITTER_TARGET / 24))
+      const hitterDeficit = expectedH - hitterCount
       if (hitterDeficit >= 3 && p.type === 'pitcher') return null
+      // Position overloaded
+      if (p.type === 'hitter') {
+        const myPosCount = hittersByPos[p.pos] ?? 0
+        if (myPosCount >= (POS_SAT[p.pos] ?? 3)) return null
+      }
+
+      // ── HITTER PACE ───────────────────────────────────────────────────────
       if (hitterDeficit >= 2 && p.type === 'pitcher') {
         urgencyBoost -= 3.0
-        reasons.push(`⚠ Behind on hitters (${hitterCount}/${expectedHitters} expected by R${roundNum})`)
+        reasons.push(`⚠ Behind on hitters (${hitterCount}/${expectedH} by R${roundNum}) — pitchers penalized`)
       }
       if (hitterDeficit >= 2 && p.type === 'hitter') {
         urgencyBoost += hitterDeficit * 1.5
-        reasons.push(`Filling hitter gap — ${hitterCount}/${expectedHitters} expected`)
+        reasons.push(`Filling hitter gap (${hitterCount}/${expectedH} expected by R${roundNum})`)
       }
 
       // ── POSITION DIVERSITY ────────────────────────────────────────────────
-      // Prevent SS overload and encourage filling unfilled positions (esp 2B)
       if (p.type === 'hitter') {
         const myPosCount = hittersByPos[p.pos] ?? 0
-        const needed     = POS_NEED[p.pos]    ?? 1
-        const saturation = POS_SAT[p.pos]     ?? 3
+        const needed     = POS_NEED[p.pos] ?? 1
 
-        // Hard block: way over on this position
-        if (myPosCount >= saturation) return null
-
-        // Soft penalty: one over on this position — mild discourage
+        // Soft penalty for redundant position (1 over)
         if (myPosCount >= needed + 1) {
           urgencyBoost -= 1.5
-          reasons.push(`Already have ${myPosCount} ${p.pos} — limiting redundancy`)
+          reasons.push(`Already ${myPosCount} ${p.pos} — redundancy penalty`)
         }
 
-        // Urgency: position completely unfilled and it's mid-draft
+        // Empty position urgency — scale by how late it is
         if (myPosCount === 0 && roundNum >= 7) {
-          const urgency = p.pos === '2B' ? 2.0 : p.pos === 'C' ? 1.5 : 1.0
+          const urgency = p.pos === '2B' ? 2.5   // 2B goes undrafted most commonly
+            : p.pos === 'C'  ? 2.0               // C scarcity is real
+            : 1.2
           urgencyBoost += urgency
-          reasons.push(`Need ${p.pos} — position empty (R${roundNum})`)
+          reasons.push(`${p.pos} slot empty — need to fill by R${Math.min(roundNum+3, 18)}`)
         }
       }
 
-      // ── OBP FLOOR ────────────────────────────────────────────────────────
-      // Soft penalty for very low OBP hitters — they hurt the team average.
-      // Only applies before round 20 (late round streamers get a pass).
+      // ── OBP QUALITY GATE ──────────────────────────────────────────────────
+      // Team OBP target is 0.345 — low-OBP hitters silently kill this category.
+      // Penalty scales with both how low the player's OBP is AND how far team is from target.
       if (p.type === 'hitter' && roundNum < 20) {
         const obp = p.OBP ?? 0
-        if (obp < 0.310) {
-          // Severe: 0.280–0.309 range
-          urgencyBoost -= 2.0
-          reasons.push(`⚠ Low OBP (${obp.toFixed(3)}) — drags team average below target`)
-        } else if (obp < 0.320) {
-          // Mild: 0.310–0.319 range
-          urgencyBoost -= 1.0
-          reasons.push(`⚠ Below-avg OBP (${obp.toFixed(3)})`)
+        const teamBehind = projOBP > 0 && obpTarget > 0 ? obpTarget - projOBP : 0
+
+        if (obp < 0.305) {
+          urgencyBoost -= 2.5
+          reasons.push(`⚠ Very low OBP ${obp.toFixed(3)} — damages team average (target ${obpTarget.toFixed(3)})`)
+        } else if (obp < 0.318) {
+          urgencyBoost -= 1.2 + (teamBehind > 0.01 ? 0.8 : 0)
+          reasons.push(`⚠ Below-avg OBP ${obp.toFixed(3)} — team at ${projOBP > 0 ? projOBP.toFixed(3) : '?'}`)
+        }
+
+        // Boost high-OBP players when team is below target
+        if (obp >= 0.345 && teamBehind > 0.005 && roundNum >= 4) {
+          urgencyBoost += 0.8
+          reasons.push(`Elite OBP ${obp.toFixed(3)} — helps team reach ${obpTarget.toFixed(3)} target`)
         }
       }
 
-      // ── STRIKEOUT URGENCY ─────────────────────────────────────────────────
-      // K urgency only fires after round 6 — don't let it override elite hitters early.
-      // Also requires having at least 2 hitters already (basic team foundation).
+      // ── CL SAVE URGENCY ───────────────────────────────────────────────────
+      // Strategy: 3 CLs gets you top 4-5 in S (~91-100 SV).
+      // Prioritize elite-SV closers (Diaz 36, Bednar 33, Miller 32) over mid-tier.
+      // Don't chase 4th CL — the opportunity cost in R4-5 isn't worth it.
+      if (p.pos === 'CL' && clCount < CL_MAX) {
+        // Only activate after round 6 (don't take CL over R1-5 elite hitters)
+        const baseUrgency = roundNum >= 7 ? 1.5
+          : roundNum >= 5 ? 0.8
+          : 0
+        // Extra urgency for elite-SV closers (top 4: Diaz/Bednar/Miller/Williams)
+        const zS = p.z_S ?? 0
+        const eliteBonus = zS > 1.2 ? 0.6     // Diaz/Bednar tier
+          : zS > 0.9  ? 0.3     // Miller/Williams tier
+          : 0
+        urgencyBoost += baseUrgency + eliteBonus
+        if (baseUrgency > 0)
+          reasons.push(`Need CL ${clCount}/${CL_MAX} — target ${Math.round(svPct*100)}% of SV goal`)
+        if (eliteBonus > 0)
+          reasons.push(`Elite closer: ${Math.round(p.SV ?? 0)} SV projected`)
+      }
+
+      // ── SU HOLD URGENCY ───────────────────────────────────────────────────
+      // Strategy: 3 SU in R14-18 = cheap path to top 4 in HD.
+      // These rounds have little value anyway. HD target 61 HLD.
+      if ((p.pos === 'SU' || p.pos === 'RP') && suCount < SU_MAX && roundNum >= 14) {
+        const zHD = p.z_HD ?? 0
+        const hdUrgency = hdPct < 0.70 ? 1.5 : hdPct < 0.85 ? 1.0 : 0.5
+        const qualityBonus = zHD > 0.8 ? 0.5 : 0
+        urgencyBoost += hdUrgency + qualityBonus
+        reasons.push(`Need hold spec ${suCount}/${SU_MAX} — ${Math.round(p.HLD ?? 0)} HLD (${Math.round(hdPct*100)}% of target)`)
+      }
+
+      // ── SP STRIKEOUT URGENCY ──────────────────────────────────────────────
+      // K is the hardest pitching cat — heavily favor high-K arms.
+      // Gate: only after R6 with basic hitter core built.
       if (p.pos === 'SP' && spCount < SP_MAX && kPct < 0.80 && roundNum >= 6 && hitterCount >= 2) {
         const zK = p.z_K ?? 0
         if (zK > 0.5) {
           const kUrgency = zK * 0.6 * (1 - kPct)
           urgencyBoost += kUrgency
-          reasons.push(`K gap ${Math.round((1-kPct)*100)}% — high strikeout arm`)
+          reasons.push(`K gap ${Math.round((1-kPct)*100)}% — ${Math.round(p.SO ?? 0)}K projected`)
         }
       }
 
-      // ── SAVE URGENCY ──────────────────────────────────────────────────────
-      // Prefer high-SV closers when save gap is large
-      if (p.pos === 'CL' && clCount < CL_MAX) {
-        const svUrgency = roundNum >= 7 ? 1.5 + (svPct < 0.7 ? 0.5 : 0) : 0
-        urgencyBoost += svUrgency
-        if (svUrgency > 0) {
-          const zS = p.z_S ?? 0
-          const eliteBonus = zS > 1.0 ? 0.5 : 0  // bonus for elite save projections
-          urgencyBoost += eliteBonus
-          reasons.push(`Need closers (${clCount}/${CL_MAX}) — ${Math.round((1-svPct)*100)}% SV gap`)
-        }
-      }
-
-      // SP win urgency — only fires after round 5 (build hitter core first)
+      // ── SP WIN URGENCY ────────────────────────────────────────────────────
+      // Only after R5 with hitter core started.
       if (p.pos === 'SP' && roles.winContributors < 7 && spCount < SP_MAX && roundNum >= 5 && hitterCount >= 3) {
         const spUrgency = Math.max(0, 0.8 - (spCount - 2) * 0.3)
         urgencyBoost += spUrgency
-        if (spUrgency > 0) reasons.push(`Need win contributors (${roles.winContributors}/7)`)
+        if (spUrgency > 0) reasons.push(`Win contributors ${roles.winContributors}/7 — W gap`)
       }
 
       // ── ADP VALUE BOOST / PENALTY ─────────────────────────────────────────
+      // Tiebreaker: CBS market signal. Caps at ±15% so category logic dominates.
       let adpBoostPct = 0
       if (liveScore > 0 && p.cbsADP) {
         const myRank = rankMap.get(p.id) ?? 999
@@ -344,27 +385,26 @@ export function buildRecommendations(
         else if (edge < -30)  adpBoostPct = -0.12
         else if (edge < -15)  adpBoostPct = -0.06
 
-        if (adpBoostPct > 0) {
-          reasons.push(`Value pick — our rank #${myRank} vs CBS ADP ${p.cbsADP.toFixed(1)} (+${Math.round(edge)})`)
-        } else if (adpBoostPct < 0) {
-          reasons.push(`⚠ CBS ranks later (ADP ${p.cbsADP.toFixed(1)}) vs our #${myRank}`)
-        }
+        if (adpBoostPct > 0)
+          reasons.push(`Value: our rank #${myRank} vs CBS ${p.cbsADP.toFixed(0)} (+${Math.round(edge)})`)
+        else if (adpBoostPct < 0)
+          reasons.push(`⚠ CBS ranks ${Math.round(Math.abs(edge))} spots later (ADP ${p.cbsADP.toFixed(0)})`)
       }
 
-      // ── CATEGORY NEED REASONS ─────────────────────────────────────────────
+      // ── CATEGORY GAP REASONS ──────────────────────────────────────────────
       const cats = PLAYER_CATS[p.type] ?? []
       for (const cat of cats) {
         const w = gapWeights[cat] ?? 1
         const z = p[`z_${cat}`] ?? 0
         if (w >= 1.5 && z >= 1.0) {
           const target = targets[cat]?.third
-          const cur = myTotals[cat] ?? 0
-          const isNeg = NEG_CATS.has(cat)
+          const cur    = myTotals[cat] ?? 0
+          const isNeg  = NEG_CATS.has(cat)
           if (!isNeg) {
-            const gapPct = target ? Math.round((1 - cur / target) * 100) : 0
+            const gapPct = target ? Math.round((1 - cur/target)*100) : 0
             if (gapPct > 10) reasons.push(`${cat} gap ${gapPct}% — strong contributor`)
           } else {
-            reasons.push(`Helps ${cat} (${cur > 0 ? cur.toFixed(2) : 'unset'} vs target ${target})`)
+            reasons.push(`Helps ${cat} (${cur > 0 ? cur.toFixed(2) : 'unset'} → target ${target})`)
           }
         }
       }
@@ -387,6 +427,7 @@ export function buildRecommendations(
     .filter(Boolean)
     .sort((a, b) => b.liveScore - a.liveScore)
 }
+
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function round2(n) { return Math.round(n * 100) / 100 }
