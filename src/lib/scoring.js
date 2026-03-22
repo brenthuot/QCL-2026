@@ -202,8 +202,17 @@ export function buildRecommendations(
   const HITTER_TARGET = 13
   const SP_MAX        = 6
   const CL_MAX        = 3
-  const SU_MAX        = 2   // 2 hold specialists max, only after round 14
+  const SU_MAX        = 2   // 2 hold specialists, only after round 14
   const PITCHER_MAX   = 9
+
+  // Position counts for diversity tracking
+  const hittersByPos = {}
+  for (const pl of myPlayers.filter(p => p.type === 'hitter')) {
+    hittersByPos[pl.pos] = (hittersByPos[pl.pos] ?? 0) + 1
+  }
+  // How many of each pos do we need (starter slot) and max before saturation
+  const POS_NEED = { C:1, '1B':1, '2B':1, '3B':1, SS:1, OF:4 }
+  const POS_SAT  = { C:2, '1B':3, '2B':2, '3B':2, SS:2, OF:6 }
 
   const poolForRank = fullPool ?? availablePlayers
   const sortedFull = [...poolForRank]
@@ -211,13 +220,13 @@ export function buildRecommendations(
     .sort((a, b) => (b.liveScore ?? -99) - (a.liveScore ?? -99))
   const rankMap = new Map(sortedFull.map((p, i) => [p.id, i + 1]))
 
-  // Category gap tracking for urgency
-  const projK  = myTotals.K  ?? myTotals.SO  ?? 0
-  const projSV = myTotals.S  ?? myTotals.SV  ?? 0
-  const kTarget  = targets.K?.third  ?? targets.SO?.third  ?? 1525
-  const svTarget = targets.S?.third  ?? targets.SV?.third  ?? 115
-  const kPct  = kTarget  > 0 ? projK  / kTarget  : 1
-  const svPct = svTarget > 0 ? projSV / svTarget : 1
+  // Category gap tracking
+  const projK   = myTotals.K ?? 0
+  const projSV  = myTotals.S ?? 0
+  const kTarget  = targets.K?.third  ?? 1525
+  const svTarget = targets.S?.third  ?? 115
+  const kPct   = kTarget  > 0 ? projK  / kTarget  : 1
+  const svPct  = svTarget > 0 ? projSV / svTarget : 1
 
   return availablePlayers
     .filter(p => !p.drafted)
@@ -228,22 +237,15 @@ export function buildRecommendations(
 
       // ── ROSTER BALANCE GUARDRAILS ─────────────────────────────────────────
 
-      // SU/RP: only recommend after round 14, max 2 total
-      // (Hold specialists are waiver-streamable but we need 2 for HD category)
+      // SU/RP: only after round 14, max 2
       if ((p.pos === 'SU' || p.pos === 'RP')) {
         if (roundNum < 14 || suCount >= SU_MAX) return null
       }
-
-      // SP saturation
       if (p.pos === 'SP' && spCount >= SP_MAX) return null
-
-      // CL saturation
       if (p.pos === 'CL' && clCount >= CL_MAX) return null
-
-      // Pitcher slots full
       if (p.type === 'pitcher' && pitcherCount >= PITCHER_MAX) return null
 
-      // Hitter balance: suppress pitchers when behind on hitter pace
+      // Hitter pace
       const expectedHitters = Math.round(roundNum * (HITTER_TARGET / 24))
       const hitterDeficit = expectedHitters - hitterCount
       if (hitterDeficit >= 3 && p.type === 'pitcher') return null
@@ -253,7 +255,47 @@ export function buildRecommendations(
       }
       if (hitterDeficit >= 2 && p.type === 'hitter') {
         urgencyBoost += hitterDeficit * 1.5
-        reasons.push(`Filling hitter gap — ${hitterCount}/${expectedHitters} expected by R${roundNum}`)
+        reasons.push(`Filling hitter gap — ${hitterCount}/${expectedHitters} expected`)
+      }
+
+      // ── POSITION DIVERSITY ────────────────────────────────────────────────
+      // Prevent SS overload and encourage filling unfilled positions (esp 2B)
+      if (p.type === 'hitter') {
+        const myPosCount = hittersByPos[p.pos] ?? 0
+        const needed     = POS_NEED[p.pos]    ?? 1
+        const saturation = POS_SAT[p.pos]     ?? 3
+
+        // Hard block: way over on this position
+        if (myPosCount >= saturation) return null
+
+        // Soft penalty: one over on this position — mild discourage
+        if (myPosCount >= needed + 1) {
+          urgencyBoost -= 1.5
+          reasons.push(`Already have ${myPosCount} ${p.pos} — limiting redundancy`)
+        }
+
+        // Urgency: position completely unfilled and it's mid-draft
+        if (myPosCount === 0 && roundNum >= 7) {
+          const urgency = p.pos === '2B' ? 2.0 : p.pos === 'C' ? 1.5 : 1.0
+          urgencyBoost += urgency
+          reasons.push(`Need ${p.pos} — position empty (R${roundNum})`)
+        }
+      }
+
+      // ── OBP FLOOR ────────────────────────────────────────────────────────
+      // Soft penalty for very low OBP hitters — they hurt the team average.
+      // Only applies before round 20 (late round streamers get a pass).
+      if (p.type === 'hitter' && roundNum < 20) {
+        const obp = p.OBP ?? 0
+        if (obp < 0.310) {
+          // Severe: 0.280–0.309 range
+          urgencyBoost -= 2.0
+          reasons.push(`⚠ Low OBP (${obp.toFixed(3)}) — drags team average below target`)
+        } else if (obp < 0.320) {
+          // Mild: 0.310–0.319 range
+          urgencyBoost -= 1.0
+          reasons.push(`⚠ Below-avg OBP (${obp.toFixed(3)})`)
+        }
       }
 
       // ── STRIKEOUT URGENCY ─────────────────────────────────────────────────
