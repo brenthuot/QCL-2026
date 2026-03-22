@@ -41,64 +41,64 @@
   },
   "targets": {
     "R": {
-      "first": 1020.0,
-      "second": 1003.0,
-      "third": 986.0
+      "first": 1042,
+      "second": 1023,
+      "third": 1008
     },
     "H": {
-      "first": 1897.0,
-      "second": 1882.0,
-      "third": 1846.0
+      "first": 1949,
+      "second": 1833,
+      "third": 1770
     },
     "HR": {
-      "first": 291.0,
-      "second": 279.0,
-      "third": 269.0
+      "first": 318,
+      "second": 312,
+      "third": 296
     },
     "RBI": {
-      "first": 999.0,
-      "second": 957.0,
-      "third": 945.0
+      "first": 999,
+      "second": 972,
+      "third": 956
     },
     "SB": {
-      "first": 171.0,
-      "second": 158.0,
-      "third": 152.0
+      "first": 220,
+      "second": 200,
+      "third": 186
+    },
+    "W": {
+      "first": 109,
+      "second": 105,
+      "third": 100
+    },
+    "K": {
+      "first": 1611,
+      "second": 1572,
+      "third": 1521
+    },
+    "S": {
+      "first": 105,
+      "second": 96,
+      "third": 94
+    },
+    "HD": {
+      "first": 74,
+      "second": 65,
+      "third": 61
+    },
+    "ERA": {
+      "first": 3.201,
+      "second": 3.34,
+      "third": 3.39
+    },
+    "WHIP": {
+      "first": 1.104,
+      "second": 1.124,
+      "third": 1.135
     },
     "OBP": {
       "first": 0.354,
       "second": 0.348,
       "third": 0.345
-    },
-    "W": {
-      "first": 107.0,
-      "second": 103.0,
-      "third": 101.0
-    },
-    "S": {
-      "first": 134.0,
-      "second": 121.0,
-      "third": 115.0
-    },
-    "HD": {
-      "first": 75.0,
-      "second": 67.0,
-      "third": 61.0
-    },
-    "K": {
-      "first": 1576.0,
-      "second": 1559.0,
-      "third": 1525.0
-    },
-    "ERA": {
-      "first": 3.13,
-      "second": 3.32,
-      "third": 3.41
-    },
-    "WHIP": {
-      "first": 1.13,
-      "second": 1.16,
-      "third": 1.17
     }
   },
   "pitcherTargets": {
