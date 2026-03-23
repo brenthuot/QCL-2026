@@ -385,13 +385,19 @@ export function buildRecommendations(
         const obp = p.OBP ?? 0
         const teamBehind = projOBP > 0 && obpTarget > 0 ? obpTarget - projOBP : 0
 
-        if (obp < 0.315) {
-          // Hard penalty — actively hurts OBP category
-          urgencyBoost -= 2.5
+        // Steeper tiers — OBP is explicit QCL category, low-OBP hitters
+        // cost roto points regardless of other contributions
+        if (obp < 0.305) {
+          // Severe: Varsho (.290), Basallo (.304) tier — almost unrecoverable
+          urgencyBoost -= 6.0
+          reasons.push(`⚠ Very low OBP ${obp.toFixed(3)} — serious drag on OBP category`)
+        } else if (obp < 0.315) {
+          // Hard: Ward (.298 adjusted), Chourio (.316) tier
+          urgencyBoost -= 4.0
           reasons.push(`⚠ Low OBP ${obp.toFixed(3)} — hurts team OBP (target ${obpTarget.toFixed(3)})`)
         } else if (obp < 0.325) {
-          // Moderate penalty — below average for QCL
-          urgencyBoost -= 1.5 + (teamBehind > 0.01 ? 0.5 : 0)
+          // Moderate: still below QCL average
+          urgencyBoost -= 2.0 + (teamBehind > 0.01 ? 0.5 : 0)
           reasons.push(`⚠ Below-avg OBP ${obp.toFixed(3)} — team at ${projOBP > 0 ? projOBP.toFixed(3) : '?'}`)
         }
 
@@ -399,6 +405,38 @@ export function buildRecommendations(
         if (obp >= 0.345 && teamBehind > 0.005 && roundNum >= 4) {
           urgencyBoost += 0.8
           reasons.push(`Elite OBP ${obp.toFixed(3)} — helps team reach ${obpTarget.toFixed(3)} target`)
+        }
+      }
+
+      // ── H (HITS) FLOOR ────────────────────────────────────────────────────
+      // H target 1770 requires ~148 H/player avg (pool avg is only 125).
+      // Guards: skip catchers (inherently fewer AB) and power bats (HR≥30)
+      // since their value comes from other categories.
+      if (p.type === 'hitter' && p.pos !== 'C' && (p.HR ?? 0) < 30 && roundNum < 20) {
+        const projH = p.H ?? 0
+        if (projH > 0 && projH < 110) {
+          urgencyBoost -= 2.0
+          reasons.push(`⚠ Low H projection (${projH}) — hurts team hits total`)
+        } else if (projH > 0 && projH < 125) {
+          urgencyBoost -= 1.0
+          reasons.push(`Low-contact bat (${projH} H projected)`)
+        }
+      }
+
+      // ── ERA CEILING (SP/RP) ───────────────────────────────────────────────
+      // Penalize SPs projecting ERA > 3.80 when team ERA is near/above target.
+      // Prevents stacking Luzardo (3.99) + Sheehan (3.94) + Strider (3.87)
+      // which reliably pushes team ERA above the 3.39 target.
+      if (['SP','RP'].includes(p.pos)) {
+        const spERA  = p.ERA ?? 0
+        const teamERA = myTotals.ERA ?? 0
+        if (spERA > 0 && spERA > 3.80) {
+          // Always apply some penalty for high-ERA SPs
+          const basePenalty = spERA > 4.10 ? 2.5 : spERA > 3.95 ? 1.5 : 0.8
+          // Extra penalty when team ERA is already above 3.20 (approaching target)
+          const teamPressure = teamERA > 3.20 ? 1.0 : teamERA > 3.00 ? 0.5 : 0
+          urgencyBoost -= (basePenalty + teamPressure)
+          reasons.push(`⚠ High ERA ${spERA.toFixed(2)} — risks team ERA above ${(myTotals.ERA ?? 0) > 0 ? myTotals.ERA.toFixed(2) : 'target'}`)
         }
       }
 
@@ -456,19 +494,20 @@ export function buildRecommendations(
       }
 
       // ── ADP VALUE BOOST / PENALTY ─────────────────────────────────────────
-      // Tiebreaker: CBS market signal. Caps at ±15% so category logic dominates.
+      // Using FantasyPros multi-platform consensus ADP (Yahoo+CBS+NFBC+FT+ESPN)
+      // More reliable than CBS alone — bands tightened to trust the signal more.
       let adpBoostPct = 0
       if (liveScore > 0 && p.cbsADP) {
         const myRank = rankMap.get(p.id) ?? 999
         const edge   = myRank - p.cbsADP
-        if      (edge > 20)   adpBoostPct =  0.15
-        else if (edge > 10)   adpBoostPct =  0.08
-        else if (edge > 5)    adpBoostPct =  0.03
+        if      (edge > 20)   adpBoostPct =  0.18  // boosted: clear consensus value
+        else if (edge > 10)   adpBoostPct =  0.10  // boosted
+        else if (edge > 5)    adpBoostPct =  0.04  // boosted
         else if (edge < -120) adpBoostPct = -0.50
-        else if (edge < -80)  adpBoostPct = -0.35
-        else if (edge < -50)  adpBoostPct = -0.22
-        else if (edge < -30)  adpBoostPct = -0.12
-        else if (edge < -15)  adpBoostPct = -0.06
+        else if (edge < -80)  adpBoostPct = -0.38  // tightened: trust consensus more
+        else if (edge < -50)  adpBoostPct = -0.25  // tightened
+        else if (edge < -30)  adpBoostPct = -0.15  // tightened
+        else if (edge < -15)  adpBoostPct = -0.08  // tightened
 
         // For reason text use current pick (more actionable) but keep board rank for penalty calc
         const pickEdge = currentPick != null ? currentPick - p.cbsADP : edge
