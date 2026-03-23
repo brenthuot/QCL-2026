@@ -217,7 +217,7 @@ export function rosterRoles(myPlayers) {
 // ── RECOMMENDATION ENGINE ─────────────────────────────────────────────────────
 export function buildRecommendations(
   availablePlayers, myPlayers, targets, roundNum, myTotals, gapWeights,
-  fullPool, currentPick
+  fullPool, currentPick, draftLog = []
 ) {
   const roles       = rosterRoles(myPlayers)
   const hitterCount = myPlayers.filter(p => p.type === 'hitter').length
@@ -239,6 +239,9 @@ export function buildRecommendations(
   // RP merges into SP pool, SU merges into CL pool
   const spCount      = myPlayers.filter(p => ['SP','RP'].includes(p.pos)).length
   const clCount      = myPlayers.filter(p => p.pos === 'CL').length  // SU not drafted
+  // Track the most recent round a CL was drafted — prevent back-to-back CL picks
+  const clRounds    = draftLog.filter(e => e.pos === 'CL').map(e => e.round)
+  const lastClRound = clRounds.length ? Math.max(...clRounds) : 0
 
   // Position diversity tracking
   const hittersByPos = {}
@@ -351,7 +354,8 @@ export function buildRecommendations(
       // Zero-HR hitters (pure speed plays like Simpson) provide no power and
       // distort the roster. Hard block R10-14. After R15 they're fine as
       // deep steals / bench stash.
-      if (p.type === 'hitter' && (p.HR ?? 0) === 0 && roundNum >= 10 && roundNum < 15) {
+      // Zero-HR hitters: block R10-18. Pure speed plays hurt HR, H, OBP.
+      if (p.type === 'hitter' && (p.HR ?? 0) === 0 && roundNum >= 10 && roundNum < 19) {
         return null
       }
 
@@ -380,10 +384,10 @@ export function buildRecommendations(
       }
 
       // ── CL SAVE URGENCY ───────────────────────────────────────────────────
-      // Strategy: 3 CLs gets you top 4-5 in S (~91-100 SV).
-      // Prioritize elite-SV closers (Diaz 36, Bednar 33, Miller 32) over mid-tier.
-      // Don't chase 4th CL — the opportunity cost in R4-5 isn't worth it.
-      if (p.pos === 'CL' && clCount < CL_MAX) {
+      // 2-round spacing: don't recommend CL if we took one in the last 2 rounds.
+      // Prevents 4-CL runs by forcing SP/hitter picks between closers.
+      const clTooRecent = lastClRound > 0 && (roundNum - lastClRound) <= 2
+      if (p.pos === 'CL' && clCount < CL_MAX && !clTooRecent) {
         // Only activate after round 6 (don't take CL over R1-5 elite hitters)
         const baseUrgency = roundNum >= 7 ? 1.5
           : roundNum >= 5 ? 0.8
