@@ -229,7 +229,7 @@ export default function App() {
   // Board weights — no rate amplification (keeps board rankings clean)
   const gapWeights = useMemo(() => computeGapWeights(myTotals, targets, round, gapSensitivity, false), [myTotals, targets, round, gapSensitivity])
   // Recs weights — OBP/ERA/WHIP amplified so rate stats surface in recommendations
-  const recGapWeights = useMemo(() => computeGapWeights(myTotals, targets, round, gapSensitivity, true), [myTotals, targets, round, gapSensitivity])
+  const recGapWeights = useMemo(() => computeGapWeights(myTotals, targets, round, gapSensitivity, true,  myPlayers), [myTotals, targets, round, gapSensitivity, myPlayers])
 
   // Watchlist lookup by player id
   const watchlistByPlayerId = useMemo(() => {
