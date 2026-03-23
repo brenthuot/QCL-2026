@@ -909,7 +909,7 @@ function DraftBoard({ players, fullRankMap, boardFilter, setBoardFilter, search,
                   {/* Tier pill */}
                   <td>{tierPill}</td>
 
-                  {/* CBS ADP */}
+                  {/* Market ADP */}
                   <td style={{color:'var(--text3)',fontSize:11}}>{p.cbsADP?p.cbsADP.toFixed(1):'—'}</td>
 
                   {/* Edge */}
@@ -1150,7 +1150,7 @@ function Recommendations({ recommendations, round, roles, myPlayers, targets, on
         <div style={{fontSize:11,color:'var(--text3)',display:'flex',gap:16,flexWrap:'wrap'}}>
           <span>Rankings = z-score × gap weight. Players filling biggest needs rise to the top.</span>
           <span><b style={{color:'var(--orange)'}}>Role bonus</b> = pitcher role urgency boost.</span>
-          <span><b style={{color:'var(--green)'}}>+% value</b> = our rank beats CBS ADP.</span>
+          <span><b style={{color:'var(--green)'}}>+% value</b> = our rank beats market ADP (FP consensus).</span>
         </div>
       </div>
       {/* Roster balance status */}
@@ -1265,7 +1265,7 @@ function Recommendations({ recommendations, round, roles, myPlayers, targets, on
 // ── FULL POOL ─────────────────────────────────────────────────────────────────
 function FullPool({ players, fullRankMap, search, setSearch, pos, setPos, sortKey, setSort, onSelectPlayer }) {
   const positions = ['ALL','C','1B','2B','3B','SS','OF','SP','RP','CL','SU']
-  const sortOpts = [{v:'liveScore',label:'Score'},{v:'FPTS',label:'FPTS'},{v:'cbsADP',label:'CBS ADP'},{v:'WAR',label:'WAR'},{v:'HR',label:'HR'},{v:'SB',label:'SB'},{v:'W',label:'W'},{v:'SV',label:'SV'}]
+  const sortOpts = [{v:'liveScore',label:'Score'},{v:'FPTS',label:'FPTS'},{v:'cbsADP',label:'Mkt ADP'},{v:'WAR',label:'WAR'},{v:'HR',label:'HR'},{v:'SB',label:'SB'},{v:'W',label:'W'},{v:'SV',label:'SV'}]
   const filtered = useMemo(() => {
     let p=players
     if (pos!=='ALL') p=p.filter(x=>x.pos===pos)
@@ -1392,10 +1392,10 @@ function PlayerPanel({ player, fullRankMap, onClose, onDraftMe, onDraftOther, on
             <StatBox label="Tier" value={player.tier?`T${player.tier}`:'—'} color={tierColor(player.tier??5)} />
           </div>
 
-          {/* CBS ADP + Edge */}
+          {/* Market ADP + Edge */}
           {(player.cbsADP || edge!=null) && (
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-              <StatBox label="CBS ADP" value={player.cbsADP?.toFixed(1)??'—'} color="var(--text2)" />
+              <StatBox label="Mkt ADP" value={player.cbsADP?.toFixed(1)??'—'} color="var(--text2)" />
               <StatBox label="Edge vs CBS"
                 value={edge!=null?(edge>0?`+${edge}`:String(edge)):'—'}
                 color={edge==null?'var(--text3)':edge>5?'var(--green)':edge<-5?'var(--red)':'var(--text2)'}
