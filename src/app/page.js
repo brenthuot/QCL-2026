@@ -157,6 +157,7 @@ export default function App() {
   // Draft state
   const [draftedIds,  setDraftedIds]  = useState(new Set())
   const [myPlayerIds, setMyPlayerIds] = useState([])
+  const [myDraftLog,  setMyDraftLog]  = useState([])  // [{id, round}] for spacing logic
   const [keeperIds,   setKeeperIds]   = useState(new Set())
   const [myKeeperIds, setMyKeeperIds] = useState([])
   const [round, setRound] = useState(1)
@@ -199,10 +200,11 @@ export default function App() {
       try {
         const saved = localStorage.getItem(LS_KEY)
         if (saved) {
-          const { drafted, mine } = JSON.parse(saved)
+          const { drafted, mine, draftLog } = JSON.parse(saved)
           const allDrafted = new Set([...kDrafted, ...(drafted||[])])
           setDraftedIds(allDrafted)
           setMyPlayerIds([...new Set([...myKIds, ...(mine||[])])])
+          setMyDraftLog(draftLog || [])
           setMyKeeperIds(myKIds)
           // Compute round from actual non-keeper drafted count — never trust stored roundNum
           // (stale localStorage can show round 2 when no real picks have been made)
@@ -221,7 +223,7 @@ export default function App() {
   useEffect(() => {
     if (loading) return
     localStorage.setItem(LS_KEY, JSON.stringify({
-      drafted: [...draftedIds], mine: myPlayerIds  // roundNum not saved — derived on restore
+      drafted: [...draftedIds], mine: myPlayerIds, draftLog: myDraftLog  // roundNum derived on restore
     }))
   }, [draftedIds, myPlayerIds, round, loading])
 
@@ -308,7 +310,6 @@ export default function App() {
     buildRecommendations(
       scoredPlayers.filter(p => !p.drafted && !p.isKeeper),
       myPlayers, targets, round, myTotals, recGapWeights, scoredPlayers,
-      // Compute current pick inline — no dependency on nextPick useMemo
       (() => {
         const slots = []
         for (let rd = 1; rd <= 24; rd++) {
@@ -316,12 +317,12 @@ export default function App() {
           slots.push({ round: rd, overall: (rd-1)*10 + (rd%2===1?10:1) })
         }
         const eligible = slots.filter(s => s.round >= round)
-        // pickOffset shifts which slot we're targeting
         const idx = Math.max(0, Math.min(eligible.length-1, 0 + pickOffset))
         return eligible[idx]?.overall ?? null
-      })()
+      })(),
+      myDraftLog  // for CL spacing logic
     ).slice(0, 8),
-  [scoredPlayers, myPlayers, targets, round, myTotals, recGapWeights, pickOffset])
+  [scoredPlayers, myPlayers, targets, round, myTotals, recGapWeights, pickOffset, myDraftLog])
 
   const diagnostics = useMemo(() => {
     const avail  = scoredPlayers.filter(p => !p.drafted && !p.isKeeper)
@@ -357,15 +358,9 @@ export default function App() {
   const markDrafted = useCallback((player, isMine) => {
     setDraftedIds(prev => {
       const next = new Set([...prev, player.id])
-      // Compute round from FRESH state inside the functional update — no stale closure
-      // Use total draftedIds size (keepers included) since import sets round from parsed round numbers
-      // For live drafts: advance round based on the just-updated total non-keeper count
       if (!keeperIds.has(player.id)) {
         const newNonKeeper = [...next].filter(id => !keeperIds.has(id)).length
-        // +keepersCalled adjusts for keepers already called in completed rounds
-        // We approximate by counting keepers in draftedIds that ARE in keeperIds
         const keepersCalled = [...next].filter(id => keeperIds.has(id)).length - keeperIds.size
-        // keepersCalled can't be negative (pre-loaded keepers aren't "called" yet)
         const adj = Math.max(0, keepersCalled)
         const effectiveTotal = newNonKeeper + adj
         const newRound = Math.max(1, Math.floor(effectiveTotal / TOTAL_TEAMS) + 1)
@@ -373,8 +368,11 @@ export default function App() {
       }
       return next
     })
-    if (isMine && !myPlayerIds.includes(player.id)) setMyPlayerIds(prev => [...prev, player.id])
-  }, [myPlayerIds, keeperIds])
+    if (isMine && !myPlayerIds.includes(player.id)) {
+      setMyPlayerIds(prev => [...prev, player.id])
+      setMyDraftLog(prev => [...prev, { id: player.id, round, pos: player.pos }])
+    }
+  }, [myPlayerIds, keeperIds, round])
 
   const undraftPlayer = useCallback((id) => {
     if (keeperIds.has(id)) return
@@ -409,7 +407,7 @@ export default function App() {
       kD.add(p.id)
       if (k.team === MY_TEAM) myKIds.push(p.id)
     }
-    setDraftedIds(kD); setMyPlayerIds(myKIds); setRound(1)
+    setDraftedIds(kD); setMyPlayerIds(myKIds); setMyDraftLog([]); setRound(1)
     setShowReset(false); localStorage.removeItem(LS_KEY)
   }, [allPlayers])
 
