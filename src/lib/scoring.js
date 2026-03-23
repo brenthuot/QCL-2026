@@ -289,8 +289,8 @@ export function buildRecommendations(
       // pick 101-150: +45 (mid-late, more flexibility)
       // pick 150+:  +60 (late rounds, speculative picks fine)
       if (currentPick != null && p.cbsADP) {
-        const lookahead = currentPick <= 30  ? 15
-          : currentPick <= 60  ? 25
+        const lookahead = currentPick <= 30  ? 30   // R1-3: full round of flexibility
+          : currentPick <= 60  ? 30              // R4-6: same
           : currentPick <= 100 ? 35
           : currentPick <= 150 ? 45
           : 60
