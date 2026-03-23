@@ -347,18 +347,28 @@ export function buildRecommendations(
         }
       }
 
+      // ── HR=0 HARD BLOCK ──────────────────────────────────────────────────
+      // Zero-HR hitters (pure speed plays like Simpson) provide no power and
+      // distort the roster. Hard block R10-14. After R15 they're fine as
+      // deep steals / bench stash.
+      if (p.type === 'hitter' && (p.HR ?? 0) === 0 && roundNum >= 10 && roundNum < 15) {
+        return null
+      }
+
       // ── OBP QUALITY GATE ──────────────────────────────────────────────────
-      // Team OBP target is 0.345 — low-OBP hitters silently kill this category.
-      // Penalty scales with both how low the player's OBP is AND how far team is from target.
+      // Stricter thresholds — OBP is an explicit scoring category.
+      // A .298 OBP hitter costs roto points regardless of other contributions.
       if (p.type === 'hitter' && roundNum < 20) {
         const obp = p.OBP ?? 0
         const teamBehind = projOBP > 0 && obpTarget > 0 ? obpTarget - projOBP : 0
 
-        if (obp < 0.305) {
+        if (obp < 0.315) {
+          // Hard penalty — actively hurts OBP category
           urgencyBoost -= 2.5
-          reasons.push(`⚠ Very low OBP ${obp.toFixed(3)} — damages team average (target ${obpTarget.toFixed(3)})`)
-        } else if (obp < 0.318) {
-          urgencyBoost -= 1.2 + (teamBehind > 0.01 ? 0.8 : 0)
+          reasons.push(`⚠ Low OBP ${obp.toFixed(3)} — hurts team OBP (target ${obpTarget.toFixed(3)})`)
+        } else if (obp < 0.325) {
+          // Moderate penalty — below average for QCL
+          urgencyBoost -= 1.5 + (teamBehind > 0.01 ? 0.5 : 0)
           reasons.push(`⚠ Below-avg OBP ${obp.toFixed(3)} — team at ${projOBP > 0 ? projOBP.toFixed(3) : '?'}`)
         }
 
