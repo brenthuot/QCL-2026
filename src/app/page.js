@@ -430,13 +430,13 @@ export default function App() {
     <div style={{display:'flex',flexDirection:'column',height:'100vh',overflow:'hidden'}}>
 
       {/* HEADER — matches FOF style */}
-      <div style={{background:'var(--bg2)',borderBottom:'1px solid var(--border2)',padding:'0 14px',display:'flex',alignItems:'center',justifyContent:'space-between',height:48,flexShrink:0}}>
+      <div style={{background:'var(--bg2)',borderBottom:'1px solid var(--border2)',padding:'0 8px',display:'flex',alignItems:'center',justifyContent:'space-between',height:48,flexShrink:0,overflowX:'auto',overflowY:'hidden',gap:8}}>
         {/* Left: hamburger + logo + meta + tabs */}
         <div style={{display:'flex',alignItems:'center',gap:12}}>
           <button onClick={() => setSidebarOpen(v => !v)} style={{background:'none',border:'none',color:'var(--text3)',cursor:'pointer',fontSize:16,padding:'4px 6px'}}>☰</button>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             <span style={{fontSize:14,fontWeight:700,color:'var(--text)'}}>⚾ QCL 2026</span>
-            <span style={{fontSize:11,color:'var(--text3)',borderLeft:'1px solid var(--border2)',paddingLeft:8}}>Roto · 10-Team · Pick 10</span>
+            <span className="hide-mobile" style={{fontSize:11,color:'var(--text3)',borderLeft:'1px solid var(--border2)',paddingLeft:8}}>Roto · 10-Team · Pick 10</span>
           </div>
           <div style={{borderLeft:'1px solid var(--border2)',paddingLeft:12}}>
             <div className="tab-pills">
@@ -460,15 +460,15 @@ export default function App() {
           </span>
           {/* Pick offset widget */}
           <div style={{display:'flex',alignItems:'center',gap:4,background:'var(--bg3)',border:'1px solid var(--border2)',borderRadius:6,padding:'3px 8px'}}>
-            <span style={{fontSize:10,color:'var(--text3)',whiteSpace:'nowrap'}}>Pick adj</span>
-            <span style={{fontSize:9,color:'var(--text3)'}} title="Shift pick counter forward/back if it drifts">±slots</span>
+            <span className="hide-mobile" style={{fontSize:10,color:'var(--text3)',whiteSpace:'nowrap'}}>Pick adj</span>
+            <span className="hide-mobile" style={{fontSize:9,color:'var(--text3)'}} title="Shift pick counter forward/back if it drifts">±slots</span>
             <button onClick={() => setPickOffset(o => o - 1)} style={{background:'none',border:'none',color:'var(--text2)',cursor:'pointer',fontSize:14,padding:'0 3px',lineHeight:1}}>−</button>
             <span style={{fontSize:12,fontWeight:700,color:pickOffset!==0?'var(--yellow)':'var(--text2)',minWidth:20,textAlign:'center'}}>{pickOffset > 0 ? `+${pickOffset}` : pickOffset}</span>
             <button onClick={() => setPickOffset(o => o + 1)} style={{background:'none',border:'none',color:'var(--text2)',cursor:'pointer',fontSize:14,padding:'0 3px',lineHeight:1}}>+</button>
             {pickOffset !== 0 && <button onClick={() => setPickOffset(0)} style={{background:'none',border:'none',color:'var(--text3)',cursor:'pointer',fontSize:10}}>✕</button>}
           </div>
           <button className="btn btn-primary btn-sm" onClick={() => setShowImport(true)}>📥 Import Round</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => setShowReset(true)}>↺ Reset Draft</button>
+          <button className="btn btn-ghost btn-sm hide-mobile" onClick={() => setShowReset(true)}>↺ Reset Draft</button>
         </div>
       </div>
 
