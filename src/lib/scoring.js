@@ -22,28 +22,54 @@ export const CAT_KEY = {
 // Given my team's current projected totals and the JRH targets,
 // compute a weight per category (higher = more urgent need)
 export function computeGapWeights(myTotals, targets, roundNum = 1, sensitivity = 1.0, amplifyRateStats = false, myPlayers = null) {
-  // Rate stat amplifiers — only used for Recs tab (amplifyRateStats=true)
-  // Board uses raw gaps so rankings aren't distorted by OBP/ERA/WHIP inflation
-  const RATE_AMP = amplifyRateStats ? { OBP: 10, ERA: 8, WHIP: 12 } : {}
+  // Rate stat amplifiers:
+  // Board (amplifyRateStats=false): mild OBP amp so high-OBP players rank higher
+  //   when team OBP is below target. Capped at 5 to avoid pre-split dominance.
+  // Recs (amplifyRateStats=true): full amplification for OBP/ERA/WHIP urgency.
+  const RATE_AMP = amplifyRateStats
+    ? { OBP: 10, ERA: 8, WHIP: 12 }
+    : { OBP: 5 }   // Change B: mild board amplification for OBP only
+
+  // Change C: project full-roster totals from partially-filled roster.
+  // If you have 5/12 hitters drafted projecting 200 HR, full roster projects
+  // 200*(12/5)=480 HR — no phantom HR gap. Only applies to non-rate counting stats.
+  const HITTER_SLOTS  = 12
+  const PITCHER_SLOTS = 12
+  const hittersFilled  = myPlayers ? myPlayers.filter(p => p.type === 'hitter').length  : 0
+  const pitchersFilled = myPlayers ? myPlayers.filter(p => p.type === 'pitcher').length : 0
+  const hitterScale  = hittersFilled  > 0 ? Math.min(HITTER_SLOTS  / hittersFilled,  3.0) : 1
+  const pitcherScale = pitchersFilled > 0 ? Math.min(PITCHER_SLOTS / pitchersFilled, 3.0) : 1
+  const HITTER_CATS  = new Set(['R','H','HR','RBI','SB'])
+  const PITCHER_CATS = new Set(['W','S','K'])
 
   const weights = {}
   for (const cat of ALL_CATS) {
     const target = targets[cat]?.third
     if (!target) { weights[cat] = 1; continue }
 
-    const current = myTotals[cat] ?? 0
-    const isNeg   = NEG_CATS.has(cat)
-    const amp     = RATE_AMP[cat] ?? 1  // amplify rate stat gaps
+    const rawCurrent = myTotals[cat] ?? 0
+    const isNeg = NEG_CATS.has(cat)
+    const amp   = RATE_AMP[cat] ?? 1
+
+    // Scale counting stats to project full-roster total
+    let current = rawCurrent
+    if (!isNeg && HITTER_CATS.has(cat) && hittersFilled > 0)  current = rawCurrent * hitterScale
+    if (!isNeg && PITCHER_CATS.has(cat) && pitchersFilled > 0) current = rawCurrent * pitcherScale
+    // Rate stats (OBP/ERA/WHIP) don't scale — they're averages, not sums
+    // Guard: if no hitters/pitchers drafted yet, rate stat gap is meaningless
+    // Use neutral weight (1.0) until we have at least 1 player contributing
+    if (cat === 'OBP' && hittersFilled === 0)  { weights[cat] = 1.0; continue }
+    if (cat === 'ERA' && pitchersFilled === 0)  { weights[cat] = 1.5; continue }
+    if (cat === 'WHIP' && pitchersFilled === 0) { weights[cat] = 1.5; continue }
 
     let gap
     if (isNeg) {
-      if (current === 0) { weights[cat] = 1.5; continue }
-      gap = current > target ? (current - target) / target : 0
+      if (rawCurrent === 0) { weights[cat] = 1.5; continue }
+      gap = rawCurrent > target ? (rawCurrent - target) / target : 0
     } else {
       gap = Math.max(0, (target - current) / target)
     }
 
-    // Apply rate amplifier before scaling so OBP/ERA/WHIP reach meaningful weights
     const amplifiedGap = Math.min(1, gap * amp)
     weights[cat] = Math.max(0.2, Math.min(2.5, (0.2 + amplifiedGap * 2.3) * sensitivity))
   }
