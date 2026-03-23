@@ -30,42 +30,31 @@ export function computeGapWeights(myTotals, targets, roundNum = 1, sensitivity =
     ? { OBP: 10, ERA: 8, WHIP: 12 }
     : { OBP: 5 }   // Change B: mild board amplification for OBP only
 
-  // Change C: project full-roster totals from partially-filled roster.
-  // If you have 5/12 hitters drafted projecting 200 HR, full roster projects
-  // 200*(12/5)=480 HR — no phantom HR gap. Only applies to non-rate counting stats.
-  const HITTER_SLOTS  = 12
-  const PITCHER_SLOTS = 12
+  // Change C reverted — roster-fill scaling over-suppressed urgency.
+  // Early elite picks (Alonso 38HR) would project 400+ HR for full team,
+  // collapsing weights and producing worse category coverage overall.
+  // Keeping: OBP board amplification (Change B) and rate-stat guards.
   const hittersFilled  = myPlayers ? myPlayers.filter(p => p.type === 'hitter').length  : 0
   const pitchersFilled = myPlayers ? myPlayers.filter(p => p.type === 'pitcher').length : 0
-  const hitterScale  = hittersFilled  > 0 ? Math.min(HITTER_SLOTS  / hittersFilled,  3.0) : 1
-  const pitcherScale = pitchersFilled > 0 ? Math.min(PITCHER_SLOTS / pitchersFilled, 3.0) : 1
-  const HITTER_CATS  = new Set(['R','H','HR','RBI','SB'])
-  const PITCHER_CATS = new Set(['W','S','K'])
 
   const weights = {}
   for (const cat of ALL_CATS) {
     const target = targets[cat]?.third
     if (!target) { weights[cat] = 1; continue }
 
-    const rawCurrent = myTotals[cat] ?? 0
-    const isNeg = NEG_CATS.has(cat)
-    const amp   = RATE_AMP[cat] ?? 1
+    const current = myTotals[cat] ?? 0
+    const isNeg   = NEG_CATS.has(cat)
+    const amp     = RATE_AMP[cat] ?? 1
 
-    // Scale counting stats to project full-roster total
-    let current = rawCurrent
-    if (!isNeg && HITTER_CATS.has(cat) && hittersFilled > 0)  current = rawCurrent * hitterScale
-    if (!isNeg && PITCHER_CATS.has(cat) && pitchersFilled > 0) current = rawCurrent * pitcherScale
-    // Rate stats (OBP/ERA/WHIP) don't scale — they're averages, not sums
-    // Guard: if no hitters/pitchers drafted yet, rate stat gap is meaningless
-    // Use neutral weight (1.0) until we have at least 1 player contributing
+    // Guard: rate stat gap meaningless before any players drafted
     if (cat === 'OBP' && hittersFilled === 0)  { weights[cat] = 1.0; continue }
     if (cat === 'ERA' && pitchersFilled === 0)  { weights[cat] = 1.5; continue }
     if (cat === 'WHIP' && pitchersFilled === 0) { weights[cat] = 1.5; continue }
 
     let gap
     if (isNeg) {
-      if (rawCurrent === 0) { weights[cat] = 1.5; continue }
-      gap = rawCurrent > target ? (rawCurrent - target) / target : 0
+      if (current === 0) { weights[cat] = 1.5; continue }
+      gap = current > target ? (current - target) / target : 0
     } else {
       gap = Math.max(0, (target - current) / target)
     }
