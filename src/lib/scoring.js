@@ -21,7 +21,7 @@ export const CAT_KEY = {
 // ── GAP WEIGHTS ───────────────────────────────────────────────────────────────
 // Given my team's current projected totals and the JRH targets,
 // compute a weight per category (higher = more urgent need)
-export function computeGapWeights(myTotals, targets, roundNum = 1, sensitivity = 1.0, amplifyRateStats = false) {
+export function computeGapWeights(myTotals, targets, roundNum = 1, sensitivity = 1.0, amplifyRateStats = false, myPlayers = null) {
   // Rate stat amplifiers — only used for Recs tab (amplifyRateStats=true)
   // Board uses raw gaps so rankings aren't distorted by OBP/ERA/WHIP inflation
   const RATE_AMP = amplifyRateStats ? { OBP: 10, ERA: 8, WHIP: 12 } : {}
@@ -48,20 +48,25 @@ export function computeGapWeights(myTotals, targets, roundNum = 1, sensitivity =
     weights[cat] = Math.max(0.2, Math.min(2.5, (0.2 + amplifiedGap * 2.3) * sensitivity))
   }
 
-  // SB: cap aggressively by round AND by team surplus
-  // Don't let a 0/152 start inflate SB weight to 2.88 from pick 1
-  // R1-3: cap at 0.6 (don't chase SB early — SB players often hurt OBP)
-  // R4-6: cap at 1.0
-  // R7+:  cap at 1.4 unless already near target
+  // SB: use PROJECTED end-of-season total from drafted players, not accumulated stats.
+  // Accumulated stats at mid-draft are a fraction of final projections, which creates
+  // a phantom SB gap — e.g. 103 accumulated but 160 projected → model still chases SB.
+  // Using projections gives the true picture of where the team will finish.
   const sbRawWeight = weights['SB'] ?? 1
   const sbCap = roundNum <= 3 ? 0.6 : roundNum <= 6 ? 1.0 : 1.4
-  const sbCurrent = myTotals.SB ?? 0
-  const sbTarget  = targets.SB?.third ?? 152
-  const sbPct     = sbTarget > 0 ? sbCurrent / sbTarget : 0
-  // Rapidly reduce SB weight once team is approaching target
-  const sbSurplusMult = sbPct >= 1.0 ? 0.1   // over target — almost zero weight
-    : sbPct >= 0.85 ? 0.3                       // 85%+ — strongly reduce
-    : sbPct >= 0.65 ? 0.7                       // 65%+ — moderately reduce
+  const sbTarget = targets.SB?.third ?? 186
+
+  // Prefer projected SB from myPlayers (sum of each player's full-season SB projection)
+  // Fall back to accumulated myTotals.SB if myPlayers not passed (backwards compat)
+  const sbProjected = myPlayers
+    ? myPlayers.filter(p => p.type === 'hitter').reduce((s, p) => s + (p.SB ?? 0), 0)
+    : (myTotals.SB ?? 0)
+  const sbPct = sbTarget > 0 ? sbProjected / sbTarget : 0
+
+  // Surplus multiplier based on projected (not accumulated) pace
+  const sbSurplusMult = sbPct >= 1.0  ? 0.1   // at/over target — almost zero
+    : sbPct >= 0.85 ? 0.3                       // 85%+ projected — strongly reduce
+    : sbPct >= 0.65 ? 0.7                       // 65%+ projected — moderate
     : 1.0
   weights['SB'] = Math.min(sbCap, sbRawWeight * 1.15 * sbSurplusMult)
 
