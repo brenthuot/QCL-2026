@@ -369,8 +369,12 @@ export function buildRecommendations(
       // Zero-HR hitters (pure speed plays like Simpson) provide no power and
       // distort the roster. Hard block R10-14. After R15 they're fine as
       // deep steals / bench stash.
-      // Zero-HR hitters: block R10-18. Pure speed plays hurt HR, H, OBP.
-      if (p.type === 'hitter' && (p.HR ?? 0) === 0 && roundNum >= 10 && roundNum < 19) {
+      // Low-HR hitters (HR ≤ 5): block R10-20.
+      // These are pure speed/contact plays that hurt HR and often OBP.
+      // Ewing (4 HR), Crawford (7 HR excluded — see below), Simpson (0 HR)
+      // all depress HR category while adding only marginal SB surplus.
+      // After R20 they're legitimate late-round sleepers.
+      if (p.type === 'hitter' && (p.HR ?? 0) <= 5 && roundNum >= 10 && roundNum <= 20) {
         return null
       }
 
