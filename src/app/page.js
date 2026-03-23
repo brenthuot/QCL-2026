@@ -468,7 +468,7 @@ export default function App() {
             {pickOffset !== 0 && <button onClick={() => setPickOffset(0)} style={{background:'none',border:'none',color:'var(--text3)',cursor:'pointer',fontSize:10}}>✕</button>}
           </div>
           <button className="btn btn-primary btn-sm" onClick={() => setShowImport(true)}>📥 Import Round</button>
-          <button className="btn btn-ghost btn-sm hide-mobile" onClick={() => setShowReset(true)}>↺ Reset Draft</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowReset(true)}>↺</button>
         </div>
       </div>
 
