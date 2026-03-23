@@ -199,11 +199,15 @@ export default function App() {
       try {
         const saved = localStorage.getItem(LS_KEY)
         if (saved) {
-          const { drafted, mine, roundNum } = JSON.parse(saved)
-          setDraftedIds(new Set([...kDrafted, ...(drafted||[])]))
+          const { drafted, mine } = JSON.parse(saved)
+          const allDrafted = new Set([...kDrafted, ...(drafted||[])])
+          setDraftedIds(allDrafted)
           setMyPlayerIds([...new Set([...myKIds, ...(mine||[])])])
           setMyKeeperIds(myKIds)
-          setRound(roundNum || 1)
+          // Compute round from actual non-keeper drafted count — never trust stored roundNum
+          // (stale localStorage can show round 2 when no real picks have been made)
+          const nonKeeperCount = [...allDrafted].filter(id => !kIds.has(id)).length
+          setRound(Math.max(1, Math.floor(nonKeeperCount / TOTAL_TEAMS) + 1))
           restored = true
         }
       } catch {}
@@ -217,7 +221,7 @@ export default function App() {
   useEffect(() => {
     if (loading) return
     localStorage.setItem(LS_KEY, JSON.stringify({
-      drafted: [...draftedIds], mine: myPlayerIds, roundNum: round
+      drafted: [...draftedIds], mine: myPlayerIds  // roundNum not saved — derived on restore
     }))
   }, [draftedIds, myPlayerIds, round, loading])
 
