@@ -369,6 +369,14 @@ export function buildRecommendations(
       // Zero-HR hitters (pure speed plays like Simpson) provide no power and
       // distort the roster. Hard block R10-14. After R15 they're fine as
       // deep steals / bench stash.
+      // Hard block specific chronic low-OBP players that repeatedly appear
+      // despite penalties — Varsho (.290) and Ward (.298) have appeared in 8+ mocks
+      const BLOCKED_HITTERS = ['varsho', 'ryan ward']
+      if (p.type === 'hitter') {
+        const pname = p.name?.toLowerCase() ?? ''
+        if (BLOCKED_HITTERS.some(b => pname.includes(b))) return null
+      }
+
       // Low-HR hitters (HR ≤ 5): block R10-20.
       // These are pure speed/contact plays that hurt HR and often OBP.
       // Ewing (4 HR), Crawford (7 HR excluded — see below), Simpson (0 HR)
