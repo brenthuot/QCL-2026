@@ -295,7 +295,7 @@ export function buildRecommendations(
       // Hitter hard block: bench is pitchers-only. Once all 12 hitter slots
       // are filled, no more hitters should ever be recommended.
       if (p.type === 'hitter' && hitterCount >= HITTER_TARGET) return null
-      // Players with no CBS ADP and ADP=999 are deep unknowns — gate to R14+
+      // Players with no market ADP and ADP=999 are deep unknowns — gate to R14+
       if (!p.cbsADP && (p.ADP == null || p.ADP >= 300) && roundNum < 14) return null
 
       // Hard ADP reality check: don't recommend players the market considers
@@ -512,11 +512,11 @@ export function buildRecommendations(
         // For reason text use current pick (more actionable) but keep board rank for penalty calc
         const pickEdge = currentPick != null ? currentPick - p.cbsADP : edge
         if (adpBoostPct > 0)
-          reasons.push(`Value: pick #${currentPick ?? myRank} vs CBS ADP ${p.cbsADP.toFixed(0)} (+${Math.round(Math.abs(pickEdge))})`)
+          reasons.push(`Value: pick #${currentPick ?? myRank} vs Mkt ADP ${p.cbsADP.toFixed(0)} (+${Math.round(Math.abs(pickEdge))})`)
         else if (adpBoostPct < 0) {
           const spotsLater = Math.round(Math.abs(pickEdge))
           if (spotsLater > 2)
-            reasons.push(`⚠ CBS ADP ${p.cbsADP.toFixed(0)} — ${spotsLater > 0 ? spotsLater + ' spots later than now' : 'near consensus'}`)
+            reasons.push(`⚠ Mkt ADP ${p.cbsADP.toFixed(0)} — ${spotsLater > 0 ? spotsLater + ' spots later than now' : 'near consensus'}`)
         }
       }
 
